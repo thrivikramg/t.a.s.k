@@ -13,7 +13,7 @@ interface VideoRoomProps {
 
 export default function VideoRoom({ roomId, avatar }: VideoRoomProps) {
     const { videoRef, faceResult, handResult, stream } = useFaceTracking();
-    const [peers, setPeers] = useState<{ peerId: string; userName: string; stream: MediaStream }[]>([]);
+    const [peers, setPeers] = useState<{ peerId: string; userName: string; avatar?: string; stream: MediaStream }[]>([]);
     const peersRef = useRef<Map<string, SimplePeer.Instance>>(new Map());
     const socketRef = useRef<Socket>();
     const canvasContainerRef = useRef<HTMLDivElement>(null);
@@ -53,11 +53,11 @@ export default function VideoRoom({ roomId, avatar }: VideoRoomProps) {
                 console.error("Socket connection error:", err);
             });
 
-            socket.emit("join-room", roomId, userName);
+            socket.emit("join-room", roomId, userName, avatar);
 
-            socket.on("user-connected", ({ userId, userName: remoteName }) => {
-                console.log("User connected:", userId, remoteName);
-                createPeer(userId, socket!.id!, socket!, remoteName);
+            socket.on("user-connected", ({ userId, userName: remoteName, avatar: remoteAvatar }) => {
+                console.log("User connected:", userId, remoteName, remoteAvatar);
+                createPeer(userId, socket!.id!, socket!, remoteName, remoteAvatar);
             });
 
             socket.on("user-disconnected", (userId) => {
@@ -69,12 +69,12 @@ export default function VideoRoom({ roomId, avatar }: VideoRoomProps) {
                 setPeers((prev) => prev.filter((p) => p.peerId !== userId));
             });
 
-            socket.on("offer", ({ signal, callerId, callerName }) => {
+            socket.on("offer", ({ signal, callerId, callerName, callerAvatar }) => {
                 console.log("Received offer from:", callerId, callerName);
-                addPeer(signal, callerId, socket!, callerName);
+                addPeer(signal, callerId, socket!, callerName, callerAvatar);
             });
 
-            socket.on("answer", ({ signal, senderId, senderName }) => {
+            socket.on("answer", ({ signal, senderId, senderName, senderAvatar }) => {
                 console.log("Received answer from:", senderId, senderName);
                 const item = peersRef.current.get(senderId);
                 if (item) {
@@ -101,10 +101,10 @@ export default function VideoRoom({ roomId, avatar }: VideoRoomProps) {
             peersRef.current.forEach((p) => p.destroy());
             peersRef.current.clear();
         };
-    }, [roomId, hasJoined, userName]);
+    }, [roomId, hasJoined, userName, avatar]);
 
     /** ------------------------ WEBRTC ------------------------ **/
-    const createPeer = (userToSignal: string, callerId: string, socket: Socket, remoteName: string) => {
+    const createPeer = (userToSignal: string, callerId: string, socket: Socket, remoteName: string, remoteAvatar?: string) => {
         const canvas = canvasContainerRef.current?.querySelector("canvas");
         const canvasStream = canvas?.captureStream(30);
 
@@ -124,17 +124,17 @@ export default function VideoRoom({ roomId, avatar }: VideoRoomProps) {
         });
 
         peer.on("signal", (signal) => {
-            socket.emit("offer", { target: userToSignal, signal, callerName: userName });
+            socket.emit("offer", { target: userToSignal, signal, callerName: userName, callerAvatar: avatar });
         });
 
         peer.on("stream", (stream) => {
-            setPeers((prev) => [...prev, { peerId: userToSignal, userName: remoteName, stream }]);
+            setPeers((prev) => [...prev, { peerId: userToSignal, userName: remoteName, avatar: remoteAvatar, stream }]);
         });
 
         peersRef.current.set(userToSignal, peer);
     };
 
-    const addPeer = (incomingSignal: any, callerId: string, socket: Socket, remoteName: string) => {
+    const addPeer = (incomingSignal: any, callerId: string, socket: Socket, remoteName: string, remoteAvatar?: string) => {
         const canvas = canvasContainerRef.current?.querySelector("canvas");
         const canvasStream = canvas?.captureStream(30);
 
@@ -154,11 +154,11 @@ export default function VideoRoom({ roomId, avatar }: VideoRoomProps) {
         });
 
         peer.on("signal", (signal) => {
-            socket.emit("answer", { target: callerId, signal, senderName: userName });
+            socket.emit("answer", { target: callerId, signal, senderName: userName, senderAvatar: avatar });
         });
 
         peer.on("stream", (stream) => {
-            setPeers((prev) => [...prev, { peerId: callerId, userName: remoteName, stream }]);
+            setPeers((prev) => [...prev, { peerId: callerId, userName: remoteName, avatar: remoteAvatar, stream }]);
         });
 
         peer.signal(incomingSignal);
@@ -253,6 +253,7 @@ export default function VideoRoom({ roomId, avatar }: VideoRoomProps) {
                         />
                         <div className="absolute bottom-2 left-2 px-2 py-0.5 bg-black/50 rounded text-[10px] text-white/80 font-medium backdrop-blur-sm">
                             {peer.userName || `User ${peer.peerId.slice(0, 4)}`}
+                            {peer.avatar && <span className="text-white/50 ml-1">({peer.avatar.replace(".glb", "")})</span>}
                         </div>
                     </div>
                 ))}

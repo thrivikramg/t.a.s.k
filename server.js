@@ -44,20 +44,30 @@ app.prepare().then(() => {
     io.on("connection", (socket) => {
         console.log("Socket connected:", socket.id);
 
-        socket.on("join-room", (roomId, userName) => {
+        socket.on("join-room", (roomId, userName, avatar) => {
             socket.join(roomId);
-            socket.to(roomId).emit("user-connected", { userId: socket.id, userName });
-            console.log(`User ${socket.id} (${userName}) joined room ${roomId}`);
+            socket.to(roomId).emit("user-connected", { userId: socket.id, userName, avatar });
+            console.log(`User ${socket.id} (${userName}) joined room ${roomId} with avatar ${avatar}`);
         });
 
         socket.on("offer", (data) => {
-            // data: { target, signal, callerName }
-            io.to(data.target).emit("offer", { signal: data.signal, callerId: socket.id, callerName: data.callerName });
+            // data: { target, signal, callerName, callerAvatar }
+            io.to(data.target).emit("offer", {
+                signal: data.signal,
+                callerId: socket.id,
+                callerName: data.callerName,
+                callerAvatar: data.callerAvatar
+            });
         });
 
         socket.on("answer", (data) => {
-            // data: { target, signal, senderName }
-            io.to(data.target).emit("answer", { signal: data.signal, senderId: socket.id, senderName: data.senderName });
+            // data: { target, signal, senderName, senderAvatar }
+            io.to(data.target).emit("answer", {
+                signal: data.signal,
+                senderId: socket.id,
+                senderName: data.senderName,
+                senderAvatar: data.senderAvatar
+            });
         });
 
         socket.on("disconnecting", () => {
