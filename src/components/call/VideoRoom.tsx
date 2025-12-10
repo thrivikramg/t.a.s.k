@@ -109,23 +109,36 @@ export default function VideoRoom({ roomId, avatar }: VideoRoomProps) {
     }, [roomId, hasJoined, userName, avatar]);
 
     /** ------------------------ WEBRTC ------------------------ **/
-    const createPeer = (userToSignal: string, callerId: string, socket: Socket, remoteName: string, remoteAvatar?: string) => {
+    /** ------------------------ WEBRTC ------------------------ **/
+    const getCanvasStream = () => {
         const canvas = canvasContainerRef.current?.querySelector("canvas");
-        const canvasStream = canvas?.captureStream(30);
+        if (!canvas) {
+            console.error("Canvas not found for stream capture");
+            return null;
+        }
+
+        // Cast to any because captureStream might not be in the TS definition
+        const stream = (canvas as any).captureStream(30) as MediaStream;
 
         if (streamRef.current) {
             const audioTracks = streamRef.current.getAudioTracks();
             if (audioTracks.length > 0) {
-                canvasStream?.addTrack(audioTracks[0]);
+                stream.addTrack(audioTracks[0]);
             } else {
                 console.warn("No audio tracks found in webcam stream");
             }
         }
+        return stream;
+    };
+
+    const createPeer = (userToSignal: string, callerId: string, socket: Socket, remoteName: string, remoteAvatar?: string) => {
+        const stream = getCanvasStream();
+        if (!stream) return;
 
         const peer = new SimplePeer({
             initiator: true,
             trickle: false,
-            stream: canvasStream,
+            stream: stream,
             config: {
                 iceServers: [
                     { urls: 'stun:stun.l.google.com:19302' },
@@ -146,22 +159,13 @@ export default function VideoRoom({ roomId, avatar }: VideoRoomProps) {
     };
 
     const addPeer = (incomingSignal: any, callerId: string, socket: Socket, remoteName: string, remoteAvatar?: string) => {
-        const canvas = canvasContainerRef.current?.querySelector("canvas");
-        const canvasStream = canvas?.captureStream(30);
-
-        if (streamRef.current) {
-            const audioTracks = streamRef.current.getAudioTracks();
-            if (audioTracks.length > 0) {
-                canvasStream?.addTrack(audioTracks[0]);
-            } else {
-                console.warn("No audio tracks found in webcam stream");
-            }
-        }
+        const stream = getCanvasStream();
+        if (!stream) return;
 
         const peer = new SimplePeer({
             initiator: false,
             trickle: false,
-            stream: canvasStream,
+            stream: stream,
             config: {
                 iceServers: [
                     { urls: 'stun:stun.l.google.com:19302' },

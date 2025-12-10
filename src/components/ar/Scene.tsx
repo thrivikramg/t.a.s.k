@@ -18,13 +18,14 @@ export const Scene: React.FC<SceneProps> = ({ faceResult, handResult, className,
                 camera={{ position: [0, 0, 3], fov: 50 }}
                 gl={{ preserveDrawingBuffer: true, alpha: true }} // Important for stream capture
             >
+                <color attach="background" args={['#18181b']} />
                 <ambientLight intensity={0.5} />
                 <spotLight position={[10, 10, 10]} angle={0.15} penumbra={1} intensity={1} />
                 <pointLight position={[-10, -10, -10]} intensity={0.5} />
 
                 <Suspense fallback={null}>
                     <Avatar faceResult={faceResult} handResult={handResult} url={avatarUrl} />
-                    <Environment preset="city" />
+                    <Environment files="/potsdamer_platz_1k.hdr" />
                 </Suspense>
 
                 <OrbitControls enableZoom={false} enablePan={false} />

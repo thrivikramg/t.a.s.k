@@ -22,7 +22,7 @@ export default function AvatarPreview({ url }: AvatarPreviewProps) {
 
                 <Suspense fallback={null}>
                     <Avatar faceResult={null} handResult={null} url={url} />
-                    <Environment preset="city" />
+                    <Environment files="/potsdamer_platz_1k.hdr" />
                 </Suspense>
 
                 <OrbitControls enableZoom={false} enablePan={false} autoRotate autoRotateSpeed={4} />
