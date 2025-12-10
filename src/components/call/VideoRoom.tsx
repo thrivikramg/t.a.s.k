@@ -41,8 +41,13 @@ export default function VideoRoom({ roomId, avatar }: VideoRoomProps) {
         let checkCanvasInterval: NodeJS.Timeout;
 
         const connectSocket = () => {
-            console.log("Initializing socket connection...");
-            socket = io({ path: "/api/socket" });
+            const url = window.location.origin;
+            console.log("Initializing socket connection to:", url, "with path: /api/socket");
+            socket = io(url, {
+                path: "/api/socket",
+                reconnectionAttempts: 5,
+                timeout: 10000,
+            });
             socketRef.current = socket;
 
             socket.on("connect", () => {
@@ -121,6 +126,12 @@ export default function VideoRoom({ roomId, avatar }: VideoRoomProps) {
             initiator: true,
             trickle: false,
             stream: canvasStream,
+            config: {
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:global.stun.twilio.com:3478' }
+                ]
+            }
         });
 
         peer.on("signal", (signal) => {
@@ -151,6 +162,12 @@ export default function VideoRoom({ roomId, avatar }: VideoRoomProps) {
             initiator: false,
             trickle: false,
             stream: canvasStream,
+            config: {
+                iceServers: [
+                    { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:global.stun.twilio.com:3478' }
+                ]
+            }
         });
 
         peer.on("signal", (signal) => {
