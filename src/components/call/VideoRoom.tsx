@@ -6,6 +6,7 @@ import { Scene } from "@/components/ar/Scene";
 import { xrStore } from "@/lib/xrStore";
 import { io, Socket } from "socket.io-client";
 import SimplePeer from "simple-peer";
+import { useRouter } from "next/navigation";
 
 interface VideoRoomProps {
     roomId: string;
@@ -21,6 +22,9 @@ export default function VideoRoom({ roomId, avatar }: VideoRoomProps) {
     const [showWebcam, setShowWebcam] = useState(false);
     const streamRef = useRef<MediaStream | null>(null);
     const [isStereo, setIsStereo] = useState(false);
+    const [showVRMenu, setShowVRMenu] = useState(false);
+    const [pairingId, setPairingId] = useState("");
+    const router = useRouter();
 
     useEffect(() => {
         streamRef.current = stream;
@@ -340,6 +344,69 @@ export default function VideoRoom({ roomId, avatar }: VideoRoomProps) {
                 }}
             />
 
+            {/* VR Device Selection Menu */}
+            {showVRMenu && (
+                <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md">
+                    <div className="bg-zinc-900 border border-white/10 p-8 rounded-3xl shadow-2xl max-w-sm w-full mx-4 space-y-6">
+                        <div className="text-center space-y-2">
+                            <h3 className="text-2xl font-bold text-white">Select Device Role</h3>
+                            <p className="text-sm text-zinc-400">Choose how you want to use this device</p>
+                        </div>
+
+                        <div className="space-y-4">
+                            <div className="space-y-2">
+                                <label className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Pairing ID</label>
+                                <input
+                                    type="text"
+                                    placeholder="e.g. 1234"
+                                    value={pairingId}
+                                    onChange={(e) => setPairingId(e.target.value)}
+                                    className="w-full px-4 py-3 rounded-xl bg-zinc-950 border border-white/10 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all text-white text-center font-mono"
+                                />
+                                <p className="text-[10px] text-zinc-500 text-center">Use the same ID on both devices to link them</p>
+                            </div>
+
+                            <div className="grid gap-3">
+                                <button
+                                    onClick={() => router.push(`/sender/${roomId}?pairingId=${pairingId}`)}
+                                    disabled={!pairingId.trim()}
+                                    className="group p-4 rounded-2xl bg-blue-600/10 border border-blue-500/30 hover:bg-blue-600 hover:border-blue-500 transition-all text-left disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    <div className="flex items-center gap-4">
+                                        <span className="text-2xl">💻</span>
+                                        <div>
+                                            <p className="font-bold text-white group-hover:text-white">Laptop (Sender)</p>
+                                            <p className="text-xs text-blue-300/70 group-hover:text-blue-100">Capture face tracking</p>
+                                        </div>
+                                    </div>
+                                </button>
+
+                                <button
+                                    onClick={() => router.push(`/vr-room/${roomId}?avatar=${avatar}&pairingId=${pairingId}`)}
+                                    disabled={!pairingId.trim()}
+                                    className="group p-4 rounded-2xl bg-purple-600/10 border border-purple-500/30 hover:bg-purple-600 hover:border-purple-500 transition-all text-left disabled:opacity-50 disabled:cursor-not-allowed"
+                                >
+                                    <div className="flex items-center gap-4">
+                                        <span className="text-2xl">📱</span>
+                                        <div>
+                                            <p className="font-bold text-white group-hover:text-white">Mobile (VR Room)</p>
+                                            <p className="text-xs text-purple-300/70 group-hover:text-purple-100">View in VR headset</p>
+                                        </div>
+                                    </div>
+                                </button>
+                            </div>
+                        </div>
+
+                        <button
+                            onClick={() => setShowVRMenu(false)}
+                            className="w-full py-3 text-sm text-zinc-500 hover:text-white transition-colors"
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {/* Controls */}
             {!isStereo && (
                 <div className="absolute bottom-6 w-full flex items-center justify-center gap-4 z-20">
@@ -352,7 +419,7 @@ export default function VideoRoom({ roomId, avatar }: VideoRoomProps) {
 
                     <button
                         className="p-4 rounded-full bg-blue-600 text-white shadow-lg hover:bg-blue-700 flex items-center gap-2"
-                        onClick={() => setIsStereo(true)}
+                        onClick={() => setShowVRMenu(true)}
                     >
                         <span className="text-lg">🥽</span>
                         Enter VR

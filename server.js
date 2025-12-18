@@ -74,6 +74,11 @@ app.prepare().then(() => {
             });
         });
 
+        socket.on("expression-update", ({ roomId, pairingId, expressions }) => {
+            // Broadcast facial expressions with pairingId to everyone else in the room
+            socket.to(roomId).emit("expression-update", { pairingId, expressions });
+        });
+
         socket.on("disconnecting", () => {
             const rooms = [...socket.rooms];
             rooms.forEach((roomId) => {

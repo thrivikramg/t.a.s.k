@@ -7,9 +7,13 @@ import { FaceLandmarkerResult, HandLandmarkerResult } from '@mediapipe/tasks-vis
 import * as THREE from 'three';
 
 interface AvatarProps {
-  faceResultRef: React.MutableRefObject<FaceLandmarkerResult | null>;
-  handResultRef: React.MutableRefObject<HandLandmarkerResult | null>;
+  faceResultRef?: React.MutableRefObject<FaceLandmarkerResult | null>;
+  handResultRef?: React.MutableRefObject<HandLandmarkerResult | null>;
   url?: string;
+  externalExpressions?: {
+    blendshapes: Record<string, number>;
+    rotation: number[] | null;
+  };
 }
 
 // Mapping from MediaPipe names to possible GLB MorphTarget names (kept small for brevity)
@@ -23,7 +27,7 @@ const BLENDSHAPE_MAP: Record<string, string[]> = {
   // add more mappings if needed
 };
 
-export const Avatar: React.FC<AvatarProps> = ({ faceResultRef, handResultRef, url = '/avatar1.glb' }) => {
+export const Avatar: React.FC<AvatarProps> = ({ faceResultRef, handResultRef, url = '/avatar1.glb', externalExpressions }) => {
   const safeUrl = url.startsWith('/') || url.startsWith('http') ? url : `/${url}`;
   const { scene } = useGLTF(safeUrl);
   const { nodes } = useGraph(scene);
@@ -97,11 +101,58 @@ export const Avatar: React.FC<AvatarProps> = ({ faceResultRef, handResultRef, ur
     let isTalking = false;
     let blendshapes: any[] = [];
 
-    const faceResult = faceResultRef.current;
-    const handResult = handResultRef.current;
+    const faceResult = faceResultRef?.current;
+    const handResult = handResultRef?.current;
 
-    // --- Face Tracking ---
-    if (faceResult && faceResult.faceBlendshapes && faceResult.faceBlendshapes.length > 0) {
+    // --- Face Tracking (Local or External) ---
+    if (externalExpressions) {
+      const { blendshapes: extBlendshapes, rotation } = externalExpressions;
+
+      // Check for talking
+      const jawOpen = extBlendshapes['jawOpen'] || 0;
+      const mouthOpen = extBlendshapes['mouthOpen'] || 0;
+      isTalking = jawOpen > 0.05 || mouthOpen > 0.05;
+
+      // Head rotation
+      if (rotation && headBoneRef.current) {
+        const m = new THREE.Matrix4().fromArray(rotation);
+        const eulerRotation = new THREE.Euler().setFromRotationMatrix(m);
+        const damp = 0.5;
+        headBoneRef.current.rotation.x = THREE.MathUtils.lerp(headBoneRef.current.rotation.x, eulerRotation.x, damp);
+        headBoneRef.current.rotation.y = THREE.MathUtils.lerp(headBoneRef.current.rotation.y, -eulerRotation.y, damp);
+        headBoneRef.current.rotation.z = THREE.MathUtils.lerp(headBoneRef.current.rotation.z, -eulerRotation.z, damp);
+      }
+
+      // Blendshapes to morph targets
+      morphMeshes.current.forEach((mesh) => {
+        if (!mesh.morphTargetDictionary || !mesh.morphTargetInfluences) return;
+        const dictionary = mesh.morphTargetDictionary;
+        const influences = mesh.morphTargetInfluences;
+
+        Object.entries(extBlendshapes).forEach(([name, score]) => {
+          let index = dictionary[name];
+          if (index === undefined && BLENDSHAPE_MAP[name]) {
+            for (const mappedName of BLENDSHAPE_MAP[name]) {
+              if (dictionary[mappedName] !== undefined) {
+                index = dictionary[mappedName];
+                break;
+              }
+            }
+          }
+
+          if (index !== undefined) {
+            let finalScore = score;
+            let lerpFactor = 0.5;
+            if (name.toLowerCase().includes('blink')) {
+              finalScore = Math.min(1, score * 1.5);
+              lerpFactor = 0.8;
+            }
+            influences[index] = THREE.MathUtils.lerp(influences[index], finalScore, lerpFactor);
+          }
+        });
+      });
+
+    } else if (faceResult && faceResult.faceBlendshapes && faceResult.faceBlendshapes.length > 0) {
       blendshapes = faceResult.faceBlendshapes[0].categories;
       const matrix = faceResult.facialTransformationMatrixes?.[0];
 

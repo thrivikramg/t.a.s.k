@@ -1,6 +1,6 @@
 "use client";
 
-import React, { Suspense, useMemo, useRef } from 'react';
+import React, { Suspense, useMemo } from 'react';
 import { Canvas, useFrame, useThree } from '@react-three/fiber';
 import { Environment, OrbitControls } from '@react-three/drei';
 import { Avatar } from './Avatar';
@@ -15,12 +15,16 @@ interface Peer {
 }
 
 interface SceneProps {
-    faceResultRef: React.MutableRefObject<FaceLandmarkerResult | null>;
-    handResultRef: React.MutableRefObject<HandLandmarkerResult | null>;
+    faceResultRef?: React.MutableRefObject<FaceLandmarkerResult | null>;
+    handResultRef?: React.MutableRefObject<HandLandmarkerResult | null>;
     className?: string;
     avatarUrl?: string;
     peers?: Peer[];
     isStereo?: boolean;
+    externalExpressions?: {
+        blendshapes: Record<string, number>;
+        rotation: number[] | null;
+    };
 }
 
 const RemoteVideoPlane: React.FC<{ stream: MediaStream; position: [number, number, number]; rotation: [number, number, number] }> = ({ stream, position, rotation }) => {
@@ -42,7 +46,7 @@ const RemoteVideoPlane: React.FC<{ stream: MediaStream; position: [number, numbe
     );
 };
 
-const SceneContent: React.FC<Omit<SceneProps, 'className'>> = ({ faceResultRef, handResultRef, avatarUrl, peers = [], isStereo = false }) => {
+const SceneContent: React.FC<Omit<SceneProps, 'className'>> = ({ faceResultRef, handResultRef, avatarUrl, peers = [], isStereo = false, externalExpressions }) => {
     const { gl, scene, camera, size } = useThree();
     const stereoCamera = useMemo(() => new THREE.StereoCamera(), []);
 
@@ -83,7 +87,12 @@ const SceneContent: React.FC<Omit<SceneProps, 'className'>> = ({ faceResultRef, 
                     <>
                         {/* VR MODE: Immersive semi-circle */}
                         <group position={[0, -2.0, 2]} scale={1.2}>
-                            <Avatar faceResultRef={faceResultRef} handResultRef={handResultRef} url={avatarUrl} />
+                            <Avatar
+                                faceResultRef={faceResultRef}
+                                handResultRef={handResultRef}
+                                url={avatarUrl}
+                                externalExpressions={externalExpressions}
+                            />
                         </group>
 
                         {peers.map((peer, index) => {
@@ -105,7 +114,12 @@ const SceneContent: React.FC<Omit<SceneProps, 'className'>> = ({ faceResultRef, 
                     <>
                         {/* AR MODE: Standard Avatar View */}
                         <group position={[0, -2.2, 0]} scale={1.8}>
-                            <Avatar faceResultRef={faceResultRef} handResultRef={handResultRef} url={avatarUrl} />
+                            <Avatar
+                                faceResultRef={faceResultRef}
+                                handResultRef={handResultRef}
+                                url={avatarUrl}
+                                externalExpressions={externalExpressions}
+                            />
                         </group>
                         <OrbitControls enableZoom={true} enablePan={false} target={[0, 0, 0]} />
                     </>
