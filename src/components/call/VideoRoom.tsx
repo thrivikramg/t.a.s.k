@@ -5,7 +5,6 @@ import { useFaceTracking } from "@/hooks/useFaceTracking";
 import { FaceLandmarkerResult, HandLandmarkerResult } from "@mediapipe/tasks-vision";
 import dynamic from 'next/dynamic';
 const Scene = dynamic(() => import('@/components/ar/Scene').then(mod => mod.Scene), { ssr: false });
-import { xrStore } from "@/lib/xrStore";
 import { io, Socket } from "socket.io-client";
 import SimplePeer from "simple-peer";
 import { useRouter } from "next/navigation";
@@ -16,7 +15,12 @@ interface VideoRoomProps {
 }
 
 export default function VideoRoom({ roomId, avatar }: VideoRoomProps) {
-    const { videoRef, faceResultRef, handResultRef, stream } = useFaceTracking();
+    // 1. State for Device Role
+    const [deviceRole, setDeviceRole] = useState<'sender' | 'receiver' | null>(null);
+
+    // 2. Face Tracking Hook - Only enabled if role is 'sender'
+    const { videoRef, faceResultRef, handResultRef, stream } = useFaceTracking({ enabled: deviceRole === 'sender' });
+
     const [peers, setPeers] = useState<{ peerId: string; userName: string; avatar?: string; stream: MediaStream }[]>([]);
     const peersRef = useRef<Map<string, SimplePeer.Instance>>(new Map());
     const socketRef = useRef<Socket>();
@@ -24,7 +28,6 @@ export default function VideoRoom({ roomId, avatar }: VideoRoomProps) {
     const [showWebcam, setShowWebcam] = useState(false);
     const streamRef = useRef<MediaStream | null>(null);
     const [isStereo, setIsStereo] = useState(false);
-    const [showVRMenu, setShowVRMenu] = useState(false);
     const [pairingId, setPairingId] = useState("");
     const router = useRouter();
 
@@ -127,7 +130,7 @@ export default function VideoRoom({ roomId, avatar }: VideoRoomProps) {
     /** ------------------------ DATA CHANNEL (TRACKING) ------------------------ **/
     // Send tracking data if we have a pairing ID (Sender Mode)
     useEffect(() => {
-        if (!hasJoined || !pairingId) return;
+        if (!hasJoined || !pairingId || deviceRole !== 'sender') return;
 
         const interval = setInterval(() => {
             if (faceResultRef.current && faceResultRef.current.faceBlendshapes && faceResultRef.current.faceBlendshapes.length > 0) {
@@ -160,7 +163,7 @@ export default function VideoRoom({ roomId, avatar }: VideoRoomProps) {
         }, 33); // ~30fps
 
         return () => clearInterval(interval);
-    }, [hasJoined, pairingId]);
+    }, [hasJoined, pairingId, deviceRole]);
 
     /** ------------------------ WEBRTC ------------------------ **/
     const getCanvasStream = () => {
@@ -173,7 +176,8 @@ export default function VideoRoom({ roomId, avatar }: VideoRoomProps) {
         // Cast to any because captureStream might not be in the TS definition
         const stream = (canvas as any).captureStream(30) as MediaStream;
 
-        if (streamRef.current) {
+        // Only add audio track if we are the sender (have a webcam stream)
+        if (streamRef.current && deviceRole === 'sender') {
             const audioTracks = streamRef.current.getAudioTracks();
             if (audioTracks.length > 0) {
                 stream.addTrack(audioTracks[0]);
@@ -213,10 +217,6 @@ export default function VideoRoom({ roomId, avatar }: VideoRoomProps) {
         peer.on("stream", (stream) => {
             console.log("Received stream from:", userToSignal);
             setPeers((prev) => [...prev, { peerId: userToSignal, userName: remoteName, avatar: remoteAvatar, stream }]);
-        });
-
-        peer.on("error", (err) => {
-            console.error("Peer error (createPeer):", err);
         });
 
         peer.on("error", (err) => {
@@ -333,23 +333,69 @@ export default function VideoRoom({ roomId, avatar }: VideoRoomProps) {
 
     if (!hasJoined) {
         return (
-            <div className="flex flex-col items-center justify-center h-screen bg-zinc-900 text-white">
+            <div className="flex flex-col items-center justify-center h-screen bg-zinc-900 text-white p-4">
                 <h1 className="text-3xl font-bold mb-8">Join Room</h1>
-                <div className="bg-black/50 p-8 rounded-2xl border border-white/10 shadow-2xl w-full max-w-md">
-                    <label className="block text-sm font-medium text-gray-300 mb-2">Enter your name</label>
-                    <input
-                        type="text"
-                        value={userName}
-                        onChange={(e) => setUserName(e.target.value)}
-                        className="w-full px-4 py-3 rounded-lg bg-zinc-800 border border-zinc-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 mb-6"
-                        placeholder="Your Name"
-                    />
+                <div className="bg-black/50 p-8 rounded-2xl border border-white/10 shadow-2xl w-full max-w-md space-y-6">
+
+                    {/* Name Input */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">Enter your name</label>
+                        <input
+                            type="text"
+                            value={userName}
+                            onChange={(e) => setUserName(e.target.value)}
+                            className="w-full px-4 py-3 rounded-lg bg-zinc-800 border border-zinc-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            placeholder="Your Name"
+                        />
+                    </div>
+
+                    {/* Pairing ID Input */}
+                    <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">Pairing ID (Optional)</label>
+                        <input
+                            type="text"
+                            value={pairingId}
+                            onChange={(e) => setPairingId(e.target.value)}
+                            className="w-full px-4 py-3 rounded-lg bg-zinc-800 border border-zinc-700 text-white focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono"
+                            placeholder="e.g. 1234"
+                        />
+                        <p className="text-xs text-zinc-500 mt-1">Use the same ID on both devices to link them.</p>
+                    </div>
+
+                    {/* Role Selection */}
+                    <div className="grid grid-cols-2 gap-4">
+                        <button
+                            onClick={() => setDeviceRole('sender')}
+                            className={`p-4 rounded-xl border transition-all text-left ${deviceRole === 'sender' ? 'bg-blue-600/20 border-blue-500 ring-1 ring-blue-500' : 'bg-zinc-800 border-zinc-700 hover:bg-zinc-700'}`}
+                        >
+                            <div className="text-2xl mb-2">💻</div>
+                            <div className="font-bold text-sm">Laptop</div>
+                            <div className="text-xs text-zinc-400">Sender (Webcam)</div>
+                        </button>
+
+                        <button
+                            onClick={() => setDeviceRole('receiver')}
+                            className={`p-4 rounded-xl border transition-all text-left ${deviceRole === 'receiver' ? 'bg-purple-600/20 border-purple-500 ring-1 ring-purple-500' : 'bg-zinc-800 border-zinc-700 hover:bg-zinc-700'}`}
+                        >
+                            <div className="text-2xl mb-2">📱</div>
+                            <div className="font-bold text-sm">Mobile</div>
+                            <div className="text-xs text-zinc-400">Receiver (VR)</div>
+                        </button>
+                    </div>
+
                     <button
                         onClick={() => {
-                            if (userName.trim()) setHasJoined(true);
+                            if (userName.trim() && deviceRole) {
+                                setHasJoined(true);
+                                if (deviceRole === 'receiver') {
+                                    setIsStereo(true); // Auto-enter VR mode for receiver
+                                } else {
+                                    setShowWebcam(true); // Auto-show webcam for sender
+                                }
+                            }
                         }}
-                        disabled={!userName.trim()}
-                        className="w-full py-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                        disabled={!userName.trim() || !deviceRole}
+                        className="w-full py-3 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed mt-4"
                     >
                         Join Call
                     </button>
@@ -412,112 +458,46 @@ export default function VideoRoom({ roomId, avatar }: VideoRoomProps) {
                 )}
             </div>
 
-            {/* Draggable Webcam */}
-            <video
-                ref={videoRef}
-                autoPlay
-                playsInline
-                muted
-                onMouseDown={onMouseDown}
-                className="absolute cursor-grab rounded-lg border border-white/20 shadow-lg z-0 object-cover"
-                style={{
-                    position: 'absolute',
-                    left: showWebcam && !isStereo ? webcamPos.x : -9999,
-                    top: showWebcam && !isStereo ? webcamPos.y : -9999,
-                    opacity: showWebcam && !isStereo ? 1 : 0, // Double insurance
-                    width: '120px',
-                    height: '90px',
-                    zIndex: 0,
-                    borderRadius: '8px',
-                    border: '1px solid rgba(255,255,255,0.2)',
-                    cursor: 'grab',
-                    objectFit: 'cover'
-                }}
-            />
-
-            {/* VR Device Selection Menu */}
-            {showVRMenu && (
-                <div className="absolute inset-0 z-[100] flex items-center justify-center bg-black/80 backdrop-blur-md">
-                    <div className="bg-zinc-900 border border-white/10 p-8 rounded-3xl shadow-2xl max-w-sm w-full mx-4 space-y-6">
-                        <div className="text-center space-y-2">
-                            <h3 className="text-2xl font-bold text-white">Select Device Role</h3>
-                            <p className="text-sm text-zinc-400">Choose how you want to use this device</p>
-                        </div>
-
-                        <div className="space-y-4">
-                            <div className="space-y-2">
-                                <label className="text-xs font-medium text-zinc-500 uppercase tracking-wider">Pairing ID</label>
-                                <input
-                                    type="text"
-                                    placeholder="e.g. 1234"
-                                    value={pairingId}
-                                    onChange={(e) => setPairingId(e.target.value)}
-                                    className="w-full px-4 py-3 rounded-xl bg-zinc-950 border border-white/10 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 outline-none transition-all text-white text-center font-mono"
-                                />
-                                <p className="text-[10px] text-zinc-500 text-center">Use the same ID on both devices to link them</p>
-                            </div>
-
-                            <div className="grid gap-3">
-                                <button
-                                    onClick={() => router.push(`/sender/${roomId}?pairingId=${pairingId}`)}
-                                    disabled={!pairingId.trim()}
-                                    className="group p-4 rounded-2xl bg-blue-600/10 border border-blue-500/30 hover:bg-blue-600 hover:border-blue-500 transition-all text-left disabled:opacity-50 disabled:cursor-not-allowed"
-                                >
-                                    <div className="flex items-center gap-4">
-                                        <span className="text-2xl">💻</span>
-                                        <div>
-                                            <p className="font-bold text-white group-hover:text-white">Laptop (Sender)</p>
-                                            <p className="text-xs text-blue-300/70 group-hover:text-blue-100">Capture face tracking</p>
-                                        </div>
-                                    </div>
-                                </button>
-
-                                <button
-                                    onClick={() => {
-                                        // Instead of navigating, toggle Stereo mode locally for this view
-                                        setIsStereo(true);
-                                        setShowVRMenu(false);
-                                    }}
-                                    className="group p-4 rounded-2xl bg-purple-600/10 border border-purple-500/30 hover:bg-purple-600 hover:border-purple-500 transition-all text-left"
-                                >
-                                    <div className="flex items-center gap-4">
-                                        <span className="text-2xl">📱</span>
-                                        <div>
-                                            <p className="font-bold text-white group-hover:text-white">Mobile (VR View)</p>
-                                            <p className="text-xs text-purple-300/70 group-hover:text-purple-100">View in VR headset</p>
-                                        </div>
-                                    </div>
-                                </button>
-                            </div>
-                        </div>
-
-                        <button
-                            onClick={() => setShowVRMenu(false)}
-                            className="w-full py-3 text-sm text-zinc-500 hover:text-white transition-colors"
-                        >
-                            Cancel
-                        </button>
-                    </div>
-                </div>
+            {/* Draggable Webcam - Only show if sender */}
+            {deviceRole === 'sender' && (
+                <video
+                    ref={videoRef}
+                    autoPlay
+                    playsInline
+                    muted
+                    onMouseDown={onMouseDown}
+                    className="absolute cursor-grab rounded-lg border border-white/20 shadow-lg z-0 object-cover"
+                    style={{
+                        position: 'absolute',
+                        left: showWebcam && !isStereo ? webcamPos.x : -9999,
+                        top: showWebcam && !isStereo ? webcamPos.y : -9999,
+                        opacity: showWebcam && !isStereo ? 1 : 0, // Double insurance
+                        width: '120px',
+                        height: '90px',
+                        zIndex: 0,
+                        borderRadius: '8px',
+                        border: '1px solid rgba(255,255,255,0.2)',
+                        cursor: 'grab',
+                        objectFit: 'cover'
+                    }}
+                />
             )}
 
             {/* Controls - Visible in both modes */}
             <div className="absolute bottom-12 w-full flex items-center justify-center gap-4 z-20">
-                <button
-                    className="p-4 rounded-full bg-red-600 text-white shadow-lg hover:bg-red-700 transition-all"
-                    onClick={() => setShowWebcam(!showWebcam)}
-                >
-                    {showWebcam ? "Hide Webcam" : "Show Webcam"}
-                </button>
+                {deviceRole === 'sender' && (
+                    <button
+                        className="p-4 rounded-full bg-red-600 text-white shadow-lg hover:bg-red-700 transition-all"
+                        onClick={() => setShowWebcam(!showWebcam)}
+                    >
+                        {showWebcam ? "Hide Webcam" : "Show Webcam"}
+                    </button>
+                )}
 
                 <button
                     className="p-4 rounded-full bg-blue-600 text-white shadow-lg hover:bg-blue-700 transition-all flex items-center gap-2"
                     onClick={() => {
-                        if (isStereo) {
-                            setIsStereo(false);
-                        } else {
-                            setShowVRMenu(true);
-                        }
+                        setIsStereo(!isStereo);
                     }}
                 >
                     <span className="text-lg">🥽</span>
@@ -535,6 +515,8 @@ export default function VideoRoom({ roomId, avatar }: VideoRoomProps) {
                 <span>Room: <span className="text-zinc-200">{roomId}</span></span>
                 <span className="mx-3 text-zinc-700">|</span>
                 <span>Peers: <span className="text-zinc-200">{peers.length}</span></span>
+                <span className="mx-3 text-zinc-700">|</span>
+                <span>Role: <span className="text-zinc-200 uppercase">{deviceRole}</span></span>
             </div>
         </div>
     );

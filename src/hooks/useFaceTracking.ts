@@ -7,7 +7,7 @@ import {
     HandLandmarkerResult,
 } from "@mediapipe/tasks-vision";
 
-export const useFaceTracking = () => {
+export const useFaceTracking = ({ enabled = true }: { enabled?: boolean } = {}) => {
     const [faceLandmarker, setFaceLandmarker] = useState<FaceLandmarker | null>(null);
     const [handLandmarker, setHandLandmarker] = useState<HandLandmarker | null>(null);
 
@@ -48,8 +48,10 @@ export const useFaceTracking = () => {
             setHandLandmarker(hand);
         };
 
-        initLandmarkers();
-    }, []);
+        if (enabled) {
+            initLandmarkers();
+        }
+    }, [enabled]);
 
     const predictWebcam = () => {
         if (!faceLandmarker || !handLandmarker || !videoRef.current) return;
@@ -100,7 +102,7 @@ export const useFaceTracking = () => {
     };
 
     useEffect(() => {
-        if (faceLandmarker && handLandmarker) {
+        if (enabled && faceLandmarker && handLandmarker) {
             startTracking();
         }
         return () => {
@@ -111,7 +113,7 @@ export const useFaceTracking = () => {
                 stream.getTracks().forEach(track => track.stop());
             }
         };
-    }, [faceLandmarker, handLandmarker]);
+    }, [faceLandmarker, handLandmarker, enabled]);
 
     return { videoRef, faceResultRef, handResultRef, stream };
 };
