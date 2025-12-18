@@ -30,24 +30,29 @@ export default function SenderPage() {
             socket.emit("join-room", roomId, "Face-Sensing-Laptop", "none");
         });
 
-        // Loop to send data at ~25 FPS
+        // Loop to send data at ~60 FPS for smoother transitions
         const interval = setInterval(() => {
             if (faceResultRef.current && faceResultRef.current.faceBlendshapes?.length > 0) {
                 const blendshapes = faceResultRef.current.faceBlendshapes[0].categories;
                 const rotation = faceResultRef.current.facialTransformationMatrixes?.[0]?.data;
 
-                // Extract only the necessary data to keep packets small
+                // Optimization: Only send blendshapes with a score > 0.01 to reduce payload size
+                // and focus on the most active expressions.
+                const activeBlendshapes = blendshapes.reduce((acc: any, cat) => {
+                    if (cat.score > 0.01) {
+                        acc[cat.categoryName] = parseFloat(cat.score.toFixed(3));
+                    }
+                    return acc;
+                }, {});
+
                 const expressions = {
-                    blendshapes: blendshapes.reduce((acc: any, cat) => {
-                        acc[cat.categoryName] = cat.score;
-                        return acc;
-                    }, {}),
-                    rotation: rotation ? Array.from(rotation) : null
+                    blendshapes: activeBlendshapes,
+                    rotation: rotation ? Array.from(rotation).map(v => parseFloat(v.toFixed(4))) : null
                 };
 
                 socket.emit("expression-update", { roomId, pairingId, expressions });
             }
-        }, 40); // 40ms = 25 FPS
+        }, 16); // 16ms = ~60 FPS
 
         return () => {
             clearInterval(interval);
