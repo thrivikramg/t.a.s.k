@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useFaceTracking } from "@/hooks/useFaceTracking";
 import { Scene } from "@/components/ar/Scene";
+import { xrStore } from "@/lib/xrStore";
 import { io, Socket } from "socket.io-client";
 import SimplePeer from "simple-peer";
 
@@ -12,13 +13,14 @@ interface VideoRoomProps {
 }
 
 export default function VideoRoom({ roomId, avatar }: VideoRoomProps) {
-    const { videoRef, faceResult, handResult, stream } = useFaceTracking();
+    const { videoRef, faceResultRef, handResultRef, stream } = useFaceTracking();
     const [peers, setPeers] = useState<{ peerId: string; userName: string; avatar?: string; stream: MediaStream }[]>([]);
     const peersRef = useRef<Map<string, SimplePeer.Instance>>(new Map());
     const socketRef = useRef<Socket>();
     const canvasContainerRef = useRef<HTMLDivElement>(null);
     const [showWebcam, setShowWebcam] = useState(false);
     const streamRef = useRef<MediaStream | null>(null);
+    const [isStereo, setIsStereo] = useState(false);
 
     useEffect(() => {
         streamRef.current = stream;
@@ -249,17 +251,25 @@ export default function VideoRoom({ roomId, avatar }: VideoRoomProps) {
     return (
         <div className="relative h-screen w-screen bg-zinc-900 overflow-hidden flex flex-col">
             {/* Main Grid */}
-            <div className="flex-1 p-4 grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 overflow-y-auto content-start">
+            <div className={`flex-1 p-4 ${isStereo ? 'hidden' : 'grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 overflow-y-auto content-start'}`}>
                 {/* Local Avatar (Self) */}
                 <div
                     ref={canvasContainerRef}
                     className="relative w-full aspect-video rounded-xl overflow-hidden border border-white/10 shadow-lg bg-black/40 backdrop-blur-md"
                 >
-                    <Scene faceResult={faceResult} handResult={handResult} className="w-full h-full" avatarUrl={avatar} />
+                    <Scene
+                        faceResultRef={faceResultRef}
+                        handResultRef={handResultRef}
+                        className="w-full h-full"
+                        avatarUrl={avatar}
+                        peers={peers}
+                        isStereo={isStereo}
+                    />
                     <div className="absolute bottom-2 left-2 px-2 py-0.5 bg-black/50 rounded text-[10px] text-white/80 font-medium backdrop-blur-sm">
                         {userName} (You)
                     </div>
                 </div>
+
 
                 {/* Remote Peers */}
                 {peers.map((peer) => (
@@ -287,6 +297,26 @@ export default function VideoRoom({ roomId, avatar }: VideoRoomProps) {
                 )}
             </div>
 
+            {/* Stereo Fullscreen Mode */}
+            {isStereo && (
+                <div className="absolute inset-0 z-50 bg-black">
+                    <Scene
+                        faceResultRef={faceResultRef}
+                        handResultRef={handResultRef}
+                        className="w-full h-full"
+                        avatarUrl={avatar}
+                        peers={peers}
+                        isStereo={true}
+                    />
+                    <button
+                        onClick={() => setIsStereo(false)}
+                        className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-full text-white z-[60] backdrop-blur-md"
+                    >
+                        ✕
+                    </button>
+                </div>
+            )}
+
             {/* Draggable Webcam */}
             <video
                 ref={videoRef}
@@ -297,9 +327,9 @@ export default function VideoRoom({ roomId, avatar }: VideoRoomProps) {
                 className="absolute cursor-grab rounded-lg border border-white/20 shadow-lg z-0 object-cover"
                 style={{
                     position: 'absolute',
-                    left: showWebcam ? webcamPos.x : -9999,
-                    top: showWebcam ? webcamPos.y : -9999,
-                    opacity: showWebcam ? 1 : 0, // Double insurance
+                    left: showWebcam && !isStereo ? webcamPos.x : -9999,
+                    top: showWebcam && !isStereo ? webcamPos.y : -9999,
+                    opacity: showWebcam && !isStereo ? 1 : 0, // Double insurance
                     width: '120px',
                     height: '90px',
                     zIndex: 0,
@@ -311,18 +341,28 @@ export default function VideoRoom({ roomId, avatar }: VideoRoomProps) {
             />
 
             {/* Controls */}
-            <div className="absolute bottom-6 w-full flex items-center justify-center gap-4 z-20">
-                <button
-                    className="p-4 rounded-full bg-red-600 text-white shadow-lg hover:bg-red-700"
-                    onClick={() => setShowWebcam(!showWebcam)}
-                >
-                    {showWebcam ? "Hide Webcam" : "Show Webcam"}
-                </button>
+            {!isStereo && (
+                <div className="absolute bottom-6 w-full flex items-center justify-center gap-4 z-20">
+                    <button
+                        className="p-4 rounded-full bg-red-600 text-white shadow-lg hover:bg-red-700"
+                        onClick={() => setShowWebcam(!showWebcam)}
+                    >
+                        {showWebcam ? "Hide Webcam" : "Show Webcam"}
+                    </button>
 
-                <div className="text-white text-sm bg-white/10 px-3 py-1 rounded-full">
-                    Room: {roomId}
+                    <button
+                        className="p-4 rounded-full bg-blue-600 text-white shadow-lg hover:bg-blue-700 flex items-center gap-2"
+                        onClick={() => setIsStereo(true)}
+                    >
+                        <span className="text-lg">🥽</span>
+                        Enter VR
+                    </button>
+
+                    <div className="text-white text-sm bg-white/10 px-3 py-1 rounded-full">
+                        Room: {roomId}
+                    </div>
                 </div>
-            </div>
+            )}
         </div>
     );
 }

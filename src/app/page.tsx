@@ -1,4 +1,3 @@
-"use strict";
 "use client";
 
 import { useState, useEffect } from "react";
@@ -14,9 +13,21 @@ export default function Home() {
 
     useEffect(() => {
         fetch("/api/avatars")
-            .then((res) => res.json())
+            .then(async (res) => {
+                if (!res.ok) {
+                    console.error("Server error:", res.status, await res.text());
+                    return { avatars: [] };
+                }
+                const contentType = res.headers.get("content-type");
+                if (!contentType || !contentType.includes("application/json")) {
+                    const text = await res.text();
+                    console.warn("Received non-JSON response:", text);
+                    return { avatars: [] };
+                }
+                return res.json();
+            })
             .then((data) => {
-                if (data.avatars && data.avatars.length > 0) {
+                if (data && data.avatars && data.avatars.length > 0) {
                     setAvatars(data.avatars);
                     setSelectedAvatar(data.avatars[0]);
                 }
@@ -125,6 +136,25 @@ export default function Home() {
                     </div>
                 </div>
 
+
+                {/* Premium / Buy Section */}
+                <div className="w-full max-w-4xl py-12 flex flex-col items-center gap-8 border-t border-zinc-800">
+                    <div className="text-center space-y-2">
+                        <h2 className="text-3xl font-bold text-white">Unlock Premium Features</h2>
+                        <p className="text-zinc-400">Get access to exclusive avatars and advanced tracking capabilities.</p>
+                    </div>
+
+                    <button
+                        onClick={() => router.push('/coming-soon')}
+                        className="group relative px-8 py-4 bg-gradient-to-r from-blue-600 to-purple-600 rounded-xl font-bold text-lg shadow-lg shadow-purple-500/25 hover:shadow-purple-500/40 transition-all duration-300 hover:scale-105"
+                    >
+                        <span className="relative z-10 flex items-center gap-2">
+                            Buy Premium Access
+                            <span className="group-hover:translate-x-1 transition-transform">→</span>
+                        </span>
+                        <div className="absolute inset-0 rounded-xl bg-gradient-to-r from-blue-600 to-purple-600 blur opacity-50 group-hover:opacity-75 transition-opacity" />
+                    </button>
+                </div>
 
                 {/* About & How it Works */}
                 <div className="grid md:grid-cols-2 gap-12 w-full max-w-4xl pt-12 border-t border-zinc-800">

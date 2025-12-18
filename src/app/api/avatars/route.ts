@@ -4,13 +4,17 @@ import path from 'path';
 
 export async function GET() {
     try {
-        const publicDir = path.join(process.cwd(), 'public');
-        const files = fs.readdirSync(publicDir);
+        // Hardcoded list as primary source to ensure they are always displayed
+        const avatars = [
+            'avatar1.glb',
+            'avatar2.glb',
+            'avatar3.glb',
+            'avatar4.glb'
+        ];
 
-        const glbFiles = files.filter(file => file.endsWith('.glb'));
-
-        return NextResponse.json({ avatars: glbFiles });
+        return NextResponse.json({ avatars });
     } catch (error) {
+        console.error('Error listing avatars:', error);
         return NextResponse.json({ error: 'Failed to list avatars' }, { status: 500 });
     }
 }

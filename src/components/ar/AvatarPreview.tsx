@@ -1,6 +1,6 @@
 "use client";
 
-import React, { Suspense } from 'react';
+import React, { Suspense, useRef } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { Environment, OrbitControls } from '@react-three/drei';
 import { Avatar } from './Avatar';
@@ -10,10 +10,13 @@ interface AvatarPreviewProps {
 }
 
 export default function AvatarPreview({ url }: AvatarPreviewProps) {
+    const faceResultRef = useRef(null);
+    const handResultRef = useRef(null);
+
     return (
         <div className="w-full h-full">
             <Canvas
-                camera={{ position: [0, 0, 3], fov: 50 }}
+                camera={{ position: [0, 0, 3], fov: 45 }}
                 gl={{ alpha: true }}
             >
                 <ambientLight intensity={0.8} />
@@ -21,7 +24,9 @@ export default function AvatarPreview({ url }: AvatarPreviewProps) {
                 <pointLight position={[-10, -10, -10]} intensity={0.5} />
 
                 <Suspense fallback={null}>
-                    <Avatar faceResult={null} handResult={null} url={url} />
+                    <group position={[0, -2.2, 0]} scale={1.8}>
+                        <Avatar faceResultRef={faceResultRef as any} handResultRef={handResultRef as any} url={url} />
+                    </group>
                     <Environment files="/potsdamer_platz_1k.hdr" />
                 </Suspense>
 
@@ -30,3 +35,4 @@ export default function AvatarPreview({ url }: AvatarPreviewProps) {
         </div>
     );
 }
+

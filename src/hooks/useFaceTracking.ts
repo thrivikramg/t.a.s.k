@@ -10,8 +10,11 @@ import {
 export const useFaceTracking = () => {
     const [faceLandmarker, setFaceLandmarker] = useState<FaceLandmarker | null>(null);
     const [handLandmarker, setHandLandmarker] = useState<HandLandmarker | null>(null);
-    const [faceResult, setFaceResult] = useState<FaceLandmarkerResult | null>(null);
-    const [handResult, setHandResult] = useState<HandLandmarkerResult | null>(null);
+
+    // Use refs for results to avoid triggering re-renders every frame
+    const faceResultRef = useRef<FaceLandmarkerResult | null>(null);
+    const handResultRef = useRef<HandLandmarkerResult | null>(null);
+
     const videoRef = useRef<HTMLVideoElement>(null);
     const requestRef = useRef<number>();
     const [stream, setStream] = useState<MediaStream | null>(null);
@@ -56,10 +59,10 @@ export const useFaceTracking = () => {
             const startTimeMs = performance.now();
             try {
                 const fResult = faceLandmarker.detectForVideo(videoRef.current, startTimeMs);
-                setFaceResult(fResult);
+                faceResultRef.current = fResult;
 
                 const hResult = handLandmarker.detectForVideo(videoRef.current, startTimeMs);
-                setHandResult(hResult);
+                handResultRef.current = hResult;
             } catch (e) {
                 console.error("Tracking error:", e);
             }
@@ -110,5 +113,6 @@ export const useFaceTracking = () => {
         };
     }, [faceLandmarker, handLandmarker]);
 
-    return { videoRef, faceResult, handResult, stream };
+    return { videoRef, faceResultRef, handResultRef, stream };
 };
+

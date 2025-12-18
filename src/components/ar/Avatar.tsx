@@ -7,8 +7,8 @@ import { FaceLandmarkerResult, HandLandmarkerResult } from '@mediapipe/tasks-vis
 import * as THREE from 'three';
 
 interface AvatarProps {
-  faceResult: FaceLandmarkerResult | null;
-  handResult?: HandLandmarkerResult | null;
+  faceResultRef: React.MutableRefObject<FaceLandmarkerResult | null>;
+  handResultRef: React.MutableRefObject<HandLandmarkerResult | null>;
   url?: string;
 }
 
@@ -23,7 +23,7 @@ const BLENDSHAPE_MAP: Record<string, string[]> = {
   // add more mappings if needed
 };
 
-export const Avatar: React.FC<AvatarProps> = ({ faceResult, handResult, url = '/avatar1.glb' }) => {
+export const Avatar: React.FC<AvatarProps> = ({ faceResultRef, handResultRef, url = '/avatar1.glb' }) => {
   const safeUrl = url.startsWith('/') || url.startsWith('http') ? url : `/${url}`;
   const { scene } = useGLTF(safeUrl);
   const { nodes } = useGraph(scene);
@@ -96,6 +96,9 @@ export const Avatar: React.FC<AvatarProps> = ({ faceResult, handResult, url = '/
   useFrame((state) => {
     let isTalking = false;
     let blendshapes: any[] = [];
+
+    const faceResult = faceResultRef.current;
+    const handResult = handResultRef.current;
 
     // --- Face Tracking ---
     if (faceResult && faceResult.faceBlendshapes && faceResult.faceBlendshapes.length > 0) {
@@ -236,10 +239,9 @@ export const Avatar: React.FC<AvatarProps> = ({ faceResult, handResult, url = '/
   });
 
   return (
-    <group position={[0, -8, 0]}>
-      <primitive object={scene} scale={5} />
-    </group>
+    <primitive object={scene} />
   );
 };
+
 
 export default Avatar;
