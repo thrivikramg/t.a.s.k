@@ -84,7 +84,7 @@ const SceneContent: React.FC<Omit<SceneProps, 'className'>> = ({ faceResultRef, 
 
             <Suspense fallback={null}>
                 {isStereo ? (
-                    <group rotation={[0, 0, Math.PI / 2]}>
+                    <group rotation={[0, 0, 0]}>
                         {/* VR MODE: Immersive semi-circle */}
                         <group position={[0, -2.0, 2]} scale={1.2}>
                             <Avatar
