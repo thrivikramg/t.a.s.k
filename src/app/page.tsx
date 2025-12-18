@@ -46,7 +46,7 @@ export default function Home() {
     };
 
     return (
-        <main className="flex min-h-screen flex-col items-center justify-center p-8 bg-zinc-950 text-white relative overflow-hidden">
+        <main className="flex min-h-screen flex-col items-center justify-center p-8 bg-zinc-950 text-white relative">
             {/* Background Effects */}
             <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
                 <div className="absolute top-[-10%] left-[-10%] w-[40%] h-[40%] bg-purple-600/20 rounded-full blur-[120px]" />

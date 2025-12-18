@@ -22,6 +22,7 @@ export default function SenderPage() {
     useEffect(() => {
         const socket = io(window.location.origin, {
             path: "/api/socket",
+            transports: ["websocket"],
         });
         socketRef.current = socket;
 

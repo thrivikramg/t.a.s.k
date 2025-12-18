@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useFaceTracking } from "@/hooks/useFaceTracking";
-import { Scene } from "@/components/ar/Scene";
+import dynamic from 'next/dynamic';
+const Scene = dynamic(() => import('@/components/ar/Scene').then(mod => mod.Scene), { ssr: false });
 import { xrStore } from "@/lib/xrStore";
 import { io, Socket } from "socket.io-client";
 import SimplePeer from "simple-peer";
@@ -53,6 +54,7 @@ export default function VideoRoom({ roomId, avatar }: VideoRoomProps) {
                 path: "/api/socket",
                 reconnectionAttempts: 5,
                 timeout: 10000,
+                transports: ["websocket"],
             });
             socketRef.current = socket;
 
@@ -115,7 +117,6 @@ export default function VideoRoom({ roomId, avatar }: VideoRoomProps) {
     }, [roomId, hasJoined, userName, avatar]);
 
     /** ------------------------ WEBRTC ------------------------ **/
-    /** ------------------------ WEBRTC ------------------------ **/
     const getCanvasStream = () => {
         const canvas = canvasContainerRef.current?.querySelector("canvas");
         if (!canvas) {
@@ -139,7 +140,12 @@ export default function VideoRoom({ roomId, avatar }: VideoRoomProps) {
 
     const createPeer = (userToSignal: string, callerId: string, socket: Socket, remoteName: string, remoteAvatar?: string) => {
         const stream = getCanvasStream();
-        if (!stream) return;
+        if (!stream) {
+            console.error("No stream available for createPeer");
+            return;
+        }
+
+        console.log("Creating peer for:", userToSignal);
 
         const peer = new SimplePeer({
             initiator: true,
@@ -154,11 +160,17 @@ export default function VideoRoom({ roomId, avatar }: VideoRoomProps) {
         });
 
         peer.on("signal", (signal) => {
+            console.log("Sending offer to:", userToSignal);
             socket.emit("offer", { target: userToSignal, signal, callerName: userName, callerAvatar: avatar });
         });
 
         peer.on("stream", (stream) => {
+            console.log("Received stream from:", userToSignal);
             setPeers((prev) => [...prev, { peerId: userToSignal, userName: remoteName, avatar: remoteAvatar, stream }]);
+        });
+
+        peer.on("error", (err) => {
+            console.error("Peer error (createPeer):", err);
         });
 
         peersRef.current.set(userToSignal, peer);
@@ -166,7 +178,12 @@ export default function VideoRoom({ roomId, avatar }: VideoRoomProps) {
 
     const addPeer = (incomingSignal: any, callerId: string, socket: Socket, remoteName: string, remoteAvatar?: string) => {
         const stream = getCanvasStream();
-        if (!stream) return;
+        if (!stream) {
+            console.error("No stream available for addPeer");
+            return;
+        }
+
+        console.log("Adding peer for:", callerId);
 
         const peer = new SimplePeer({
             initiator: false,
@@ -181,11 +198,17 @@ export default function VideoRoom({ roomId, avatar }: VideoRoomProps) {
         });
 
         peer.on("signal", (signal) => {
+            console.log("Sending answer to:", callerId);
             socket.emit("answer", { target: callerId, signal, senderName: userName, senderAvatar: avatar });
         });
 
         peer.on("stream", (stream) => {
+            console.log("Received stream from:", callerId);
             setPeers((prev) => [...prev, { peerId: callerId, userName: remoteName, avatar: remoteAvatar, stream }]);
+        });
+
+        peer.on("error", (err) => {
+            console.error("Peer error (addPeer):", err);
         });
 
         peer.signal(incomingSignal);
@@ -254,33 +277,37 @@ export default function VideoRoom({ roomId, avatar }: VideoRoomProps) {
 
     return (
         <div className="relative h-screen w-screen bg-zinc-900 overflow-hidden flex flex-col">
-            {/* Main Grid */}
-            <div className={`flex-1 p-4 ${isStereo ? 'hidden' : 'grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 overflow-y-auto content-start'}`}>
-                {/* Local Avatar (Self) */}
-                <div
-                    ref={canvasContainerRef}
-                    className="relative w-full aspect-video rounded-xl overflow-hidden border border-white/10 shadow-lg bg-black/40 backdrop-blur-md"
-                >
-                    <Scene
-                        faceResultRef={faceResultRef}
-                        handResultRef={handResultRef}
-                        className="w-full h-full"
-                        avatarUrl={avatar}
-                        peers={peers}
-                        isStereo={isStereo}
-                    />
-                    <div className="absolute bottom-2 left-2 px-2 py-0.5 bg-black/50 rounded text-[10px] text-white/80 font-medium backdrop-blur-sm">
+            {/* Fullscreen Local Avatar (Background) */}
+            <div
+                ref={canvasContainerRef}
+                className="absolute inset-0 z-0"
+            >
+                <Scene
+                    faceResultRef={faceResultRef}
+                    handResultRef={handResultRef}
+                    className="w-full h-full"
+                    avatarUrl={avatar}
+                    peers={peers}
+                    isStereo={isStereo}
+                    userName={userName}
+                />
+                {!isStereo && (
+                    <div className="absolute bottom-8 left-8 px-4 py-2 bg-black/50 rounded-lg text-sm text-white/80 font-medium backdrop-blur-sm">
                         {userName} (You)
                     </div>
-                </div>
+                )}
+            </div>
 
-
+            {/* Peers Grid Overlay - Hidden in Stereo Mode */}
+            <div className={`absolute inset-0 z-10 p-4 pointer-events-none ${isStereo ? 'hidden' : 'grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4 overflow-y-auto content-start'}`}>
                 {/* Remote Peers */}
                 {peers.map((peer) => (
-                    <div key={peer.peerId} className="relative w-full aspect-video rounded-xl overflow-hidden bg-black/50 border border-white/10 shadow-lg">
+                    <div key={peer.peerId} className="relative w-full aspect-video rounded-xl overflow-hidden bg-black/50 border border-white/10 shadow-lg pointer-events-auto">
                         <video
                             ref={(ref) => {
-                                if (ref) ref.srcObject = peer.stream;
+                                if (ref) {
+                                    ref.srcObject = peer.stream;
+                                }
                             }}
                             autoPlay
                             playsInline
@@ -293,33 +320,13 @@ export default function VideoRoom({ roomId, avatar }: VideoRoomProps) {
                     </div>
                 ))}
 
-                {/* Placeholder if alone (optional, or just let the grid fill) */}
+                {/* Placeholder if alone (optional) */}
                 {peers.length === 0 && (
-                    <div className="hidden md:flex items-center justify-center rounded-xl border border-dashed border-white/10 text-white/20 font-light tracking-widest uppercase text-xs aspect-video">
-                        Waiting...
+                    <div className="hidden md:flex items-center justify-center rounded-xl border border-dashed border-white/10 text-white/20 font-light tracking-widest uppercase text-xs aspect-video pointer-events-auto">
+                        Waiting for peers...
                     </div>
                 )}
             </div>
-
-            {/* Stereo Fullscreen Mode */}
-            {isStereo && (
-                <div className="absolute inset-0 z-50 bg-black">
-                    <Scene
-                        faceResultRef={faceResultRef}
-                        handResultRef={handResultRef}
-                        className="w-full h-full"
-                        avatarUrl={avatar}
-                        peers={peers}
-                        isStereo={true}
-                    />
-                    <button
-                        onClick={() => setIsStereo(false)}
-                        className="absolute top-4 right-4 p-2 bg-white/10 hover:bg-white/20 rounded-full text-white z-[60] backdrop-blur-md"
-                    >
-                        ✕
-                    </button>
-                </div>
-            )}
 
             {/* Draggable Webcam */}
             <video
@@ -382,14 +389,17 @@ export default function VideoRoom({ roomId, avatar }: VideoRoomProps) {
                                 </button>
 
                                 <button
-                                    onClick={() => router.push(`/vr-room/${roomId}?avatar=${avatar}&pairingId=${pairingId}`)}
-                                    disabled={!pairingId.trim()}
-                                    className="group p-4 rounded-2xl bg-purple-600/10 border border-purple-500/30 hover:bg-purple-600 hover:border-purple-500 transition-all text-left disabled:opacity-50 disabled:cursor-not-allowed"
+                                    onClick={() => {
+                                        // Instead of navigating, toggle Stereo mode locally for this view
+                                        setIsStereo(true);
+                                        setShowVRMenu(false);
+                                    }}
+                                    className="group p-4 rounded-2xl bg-purple-600/10 border border-purple-500/30 hover:bg-purple-600 hover:border-purple-500 transition-all text-left"
                                 >
                                     <div className="flex items-center gap-4">
                                         <span className="text-2xl">📱</span>
                                         <div>
-                                            <p className="font-bold text-white group-hover:text-white">Mobile (VR Room)</p>
+                                            <p className="font-bold text-white group-hover:text-white">Mobile (VR View)</p>
                                             <p className="text-xs text-purple-300/70 group-hover:text-purple-100">View in VR headset</p>
                                         </div>
                                     </div>
@@ -407,29 +417,41 @@ export default function VideoRoom({ roomId, avatar }: VideoRoomProps) {
                 </div>
             )}
 
-            {/* Controls */}
-            {!isStereo && (
-                <div className="absolute bottom-6 w-full flex items-center justify-center gap-4 z-20">
-                    <button
-                        className="p-4 rounded-full bg-red-600 text-white shadow-lg hover:bg-red-700"
-                        onClick={() => setShowWebcam(!showWebcam)}
-                    >
-                        {showWebcam ? "Hide Webcam" : "Show Webcam"}
-                    </button>
+            {/* Controls - Visible in both modes */}
+            <div className="absolute bottom-12 w-full flex items-center justify-center gap-4 z-20">
+                <button
+                    className="p-4 rounded-full bg-red-600 text-white shadow-lg hover:bg-red-700 transition-all"
+                    onClick={() => setShowWebcam(!showWebcam)}
+                >
+                    {showWebcam ? "Hide Webcam" : "Show Webcam"}
+                </button>
 
-                    <button
-                        className="p-4 rounded-full bg-blue-600 text-white shadow-lg hover:bg-blue-700 flex items-center gap-2"
-                        onClick={() => setShowVRMenu(true)}
-                    >
-                        <span className="text-lg">🥽</span>
-                        Enter VR
-                    </button>
+                <button
+                    className="p-4 rounded-full bg-blue-600 text-white shadow-lg hover:bg-blue-700 transition-all flex items-center gap-2"
+                    onClick={() => {
+                        if (isStereo) {
+                            setIsStereo(false);
+                        } else {
+                            setShowVRMenu(true);
+                        }
+                    }}
+                >
+                    <span className="text-lg">🥽</span>
+                    {isStereo ? "Exit VR" : "Enter VR"}
+                </button>
+            </div>
 
-                    <div className="text-white text-sm bg-white/10 px-3 py-1 rounded-full">
-                        Room: {roomId}
-                    </div>
+            {/* Status Bar */}
+            <div className="absolute bottom-0 w-full bg-black/80 backdrop-blur-md border-t border-white/10 py-2 px-4 text-xs font-mono text-zinc-400 flex items-center justify-center z-50">
+                <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></span>
+                    <span>Connected! Waiting for data...</span>
                 </div>
-            )}
+                <span className="mx-3 text-zinc-700">|</span>
+                <span>Room: <span className="text-zinc-200">{roomId}</span></span>
+                <span className="mx-3 text-zinc-700">|</span>
+                <span>Peers: <span className="text-zinc-200">{peers.length}</span></span>
+            </div>
         </div>
     );
 }

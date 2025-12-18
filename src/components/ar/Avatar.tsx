@@ -147,6 +147,9 @@ export const Avatar: React.FC<AvatarProps> = ({ faceResultRef, handResultRef, ur
               finalScore = Math.min(1, score * 1.5);
               lerpFactor = 0.8; // Blinks need to be fast
             }
+            if (name === 'jawOpen' || name === 'mouthOpen') {
+              finalScore = Math.min(1, score * 2.5);
+            }
             influences[index] = THREE.MathUtils.lerp(influences[index], finalScore, lerpFactor);
           }
         });
@@ -218,6 +221,9 @@ export const Avatar: React.FC<AvatarProps> = ({ faceResultRef, handResultRef, ur
             if (name.toLowerCase().includes('blink')) {
               finalScore = Math.min(1, score * 1.5);
               lerpFactor = 0.6; // Blinks need to be slightly faster but still smooth
+            }
+            if (name === 'jawOpen' || name === 'mouthOpen') {
+              finalScore = Math.min(1, score * 2.5);
             }
             influences[index] = THREE.MathUtils.lerp(influences[index], finalScore, lerpFactor);
           }
