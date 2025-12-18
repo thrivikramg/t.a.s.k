@@ -52,7 +52,7 @@ export default function SenderPage() {
 
                 socket.emit("expression-update", { roomId, pairingId, expressions });
             }
-        }, 16); // 16ms = ~60 FPS
+        }, 10); // 10ms = ~100 FPS
 
         return () => {
             clearInterval(interval);

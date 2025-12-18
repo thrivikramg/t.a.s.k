@@ -117,7 +117,7 @@ export const Avatar: React.FC<AvatarProps> = ({ faceResultRef, handResultRef, ur
       if (rotation && headBoneRef.current) {
         const m = new THREE.Matrix4().fromArray(rotation);
         const eulerRotation = new THREE.Euler().setFromRotationMatrix(m);
-        const damp = 0.15; // Lower = smoother/slower, Higher = snappier
+        const damp = 0.4; // Increased for snappier movement
         headBoneRef.current.rotation.x = THREE.MathUtils.lerp(headBoneRef.current.rotation.x, eulerRotation.x, damp);
         headBoneRef.current.rotation.y = THREE.MathUtils.lerp(headBoneRef.current.rotation.y, -eulerRotation.y, damp);
         headBoneRef.current.rotation.z = THREE.MathUtils.lerp(headBoneRef.current.rotation.z, -eulerRotation.z, damp);
@@ -142,10 +142,10 @@ export const Avatar: React.FC<AvatarProps> = ({ faceResultRef, handResultRef, ur
 
           if (index !== undefined) {
             let finalScore = score;
-            let lerpFactor = 0.25; // Smoother blendshape transitions
+            let lerpFactor = 0.5; // Faster blendshape transitions
             if (name.toLowerCase().includes('blink')) {
               finalScore = Math.min(1, score * 1.5);
-              lerpFactor = 0.6; // Blinks need to be slightly faster but still smooth
+              lerpFactor = 0.8; // Blinks need to be fast
             }
             influences[index] = THREE.MathUtils.lerp(influences[index], finalScore, lerpFactor);
           }
