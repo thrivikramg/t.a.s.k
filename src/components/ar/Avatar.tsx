@@ -13,6 +13,7 @@ interface AvatarProps {
   externalExpressions?: {
     blendshapes: Record<string, number>;
     rotation: number[] | null;
+    handResult?: HandLandmarkerResult | null;
   };
 }
 
@@ -106,7 +107,8 @@ export const Avatar: React.FC<AvatarProps> = ({ faceResultRef, handResultRef, ur
     let blendshapes: any[] = [];
 
     const faceResult = faceResultRef?.current;
-    const handResult = handResultRef?.current;
+    // Use external hand result if available, otherwise local
+    const handResult = externalExpressions?.handResult || handResultRef?.current;
 
     // --- Face Tracking (Local or External) ---
     if (externalExpressions) {

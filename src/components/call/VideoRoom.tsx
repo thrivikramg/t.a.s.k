@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useFaceTracking } from "@/hooks/useFaceTracking";
+import { FaceLandmarkerResult, HandLandmarkerResult } from "@mediapipe/tasks-vision";
 import dynamic from 'next/dynamic';
 const Scene = dynamic(() => import('@/components/ar/Scene').then(mod => mod.Scene), { ssr: false });
 import { xrStore } from "@/lib/xrStore";
@@ -26,6 +27,13 @@ export default function VideoRoom({ roomId, avatar }: VideoRoomProps) {
     const [showVRMenu, setShowVRMenu] = useState(false);
     const [pairingId, setPairingId] = useState("");
     const router = useRouter();
+
+    // Remote tracking data from paired device
+    const [remoteTrackingData, setRemoteTrackingData] = useState<{
+        blendshapes: Record<string, number>;
+        rotation: number[] | null;
+        handResult?: HandLandmarkerResult | null;
+    } | undefined>(undefined);
 
     useEffect(() => {
         streamRef.current = stream;
@@ -116,6 +124,44 @@ export default function VideoRoom({ roomId, avatar }: VideoRoomProps) {
         };
     }, [roomId, hasJoined, userName, avatar]);
 
+    /** ------------------------ DATA CHANNEL (TRACKING) ------------------------ **/
+    // Send tracking data if we have a pairing ID (Sender Mode)
+    useEffect(() => {
+        if (!hasJoined || !pairingId) return;
+
+        const interval = setInterval(() => {
+            if (faceResultRef.current && faceResultRef.current.faceBlendshapes && faceResultRef.current.faceBlendshapes.length > 0) {
+                const blendshapes = faceResultRef.current.faceBlendshapes[0].categories.reduce((acc, category) => {
+                    acc[category.categoryName] = category.score;
+                    return acc;
+                }, {} as Record<string, number>);
+
+                const matrix = faceResultRef.current.facialTransformationMatrixes?.[0]?.data;
+
+                const data = {
+                    type: 'tracking-data',
+                    pairingId,
+                    blendshapes,
+                    rotation: matrix ? Array.from(matrix) : null,
+                    handResult: handResultRef.current // Send hand data too
+                };
+
+                const json = JSON.stringify(data);
+                peersRef.current.forEach((peer) => {
+                    if (peer.connected) {
+                        try {
+                            peer.send(json);
+                        } catch (e) {
+                            console.error("Error sending data:", e);
+                        }
+                    }
+                });
+            }
+        }, 33); // ~30fps
+
+        return () => clearInterval(interval);
+    }, [hasJoined, pairingId]);
+
     /** ------------------------ WEBRTC ------------------------ **/
     const getCanvasStream = () => {
         const canvas = canvasContainerRef.current?.querySelector("canvas");
@@ -173,6 +219,26 @@ export default function VideoRoom({ roomId, avatar }: VideoRoomProps) {
             console.error("Peer error (createPeer):", err);
         });
 
+        peer.on("error", (err) => {
+            console.error("Peer error (createPeer):", err);
+        });
+
+        peer.on("data", (data) => {
+            try {
+                const msg = JSON.parse(data.toString());
+                if (msg.type === 'tracking-data' && msg.pairingId === pairingId) {
+                    // We received tracking data from our paired device!
+                    setRemoteTrackingData({
+                        blendshapes: msg.blendshapes,
+                        rotation: msg.rotation,
+                        handResult: msg.handResult
+                    });
+                }
+            } catch (e) {
+                console.error("Error parsing data:", e);
+            }
+        });
+
         peersRef.current.set(userToSignal, peer);
     };
 
@@ -212,6 +278,23 @@ export default function VideoRoom({ roomId, avatar }: VideoRoomProps) {
         });
 
         peer.signal(incomingSignal);
+
+        peer.on("data", (data) => {
+            try {
+                const msg = JSON.parse(data.toString());
+                if (msg.type === 'tracking-data' && msg.pairingId === pairingId) {
+                    // We received tracking data from our paired device!
+                    setRemoteTrackingData({
+                        blendshapes: msg.blendshapes,
+                        rotation: msg.rotation,
+                        handResult: msg.handResult
+                    });
+                }
+            } catch (e) {
+                console.error("Error parsing data:", e);
+            }
+        });
+
         peersRef.current.set(callerId, peer);
     };
 
@@ -290,6 +373,7 @@ export default function VideoRoom({ roomId, avatar }: VideoRoomProps) {
                     peers={peers}
                     isStereo={isStereo}
                     userName={userName}
+                    externalExpressions={remoteTrackingData} // Pass remote data if available
                 />
                 {!isStereo && (
                     <div className="absolute bottom-8 left-8 px-4 py-2 bg-black/50 rounded-lg text-sm text-white/80 font-medium backdrop-blur-sm">

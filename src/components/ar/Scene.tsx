@@ -25,6 +25,7 @@ export interface SceneProps {
     externalExpressions?: {
         blendshapes: Record<string, number>;
         rotation: number[] | null;
+        handResult?: HandLandmarkerResult | null;
     };
 }
 
