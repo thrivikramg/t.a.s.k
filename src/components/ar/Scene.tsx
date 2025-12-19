@@ -1,6 +1,6 @@
 "use client";
 
-import React, { Suspense, useMemo } from "react";
+import React, { Suspense, useMemo, useEffect } from "react";
 import { Canvas, useFrame, useThree } from "@react-three/fiber";
 import { Environment, OrbitControls } from "@react-three/drei";
 import { Avatar } from "./Avatar";
@@ -12,6 +12,11 @@ interface Peer {
     userName: string;
     avatar?: string;
     stream: MediaStream;
+    trackingData?: {
+        blendshapes: Record<string, number>;
+        rotation: number[] | null;
+        handResult?: HandLandmarkerResult | null;
+    };
 }
 
 export interface SceneProps {
@@ -83,21 +88,35 @@ const RemoteVideoPlane: React.FC<{
         v.srcObject = stream;
         v.muted = true;
         v.playsInline = true;
-        v.play().catch((err) => console.error("Video play error:", err));
+        v.autoplay = true;
         return v;
     }, [stream]);
+
+    useEffect(() => {
+        if (video) {
+            video.play().catch((err) => console.error("Video play error:", err));
+        }
+    }, [video]);
 
     const label = `${userName} ${avatar ? `(${avatar.replace('.glb', '')})` : ''}`;
 
     return (
         <group position={position} rotation={rotation}>
+            {/* Background/Border */}
+            <mesh position={[0, 0, -0.01]}>
+                <planeGeometry args={[3.4, 2.0]} />
+                <meshBasicMaterial color="#27272a" side={THREE.DoubleSide} />
+            </mesh>
+
+            {/* Video Plane */}
             <mesh>
                 <planeGeometry args={[3.2, 1.8]} />
-                <meshBasicMaterial side={THREE.DoubleSide} color="white">
-                    <videoTexture attach="map" args={[video]} encoding={THREE.sRGBEncoding} />
+                <meshBasicMaterial side={THREE.DoubleSide}>
+                    <videoTexture attach="map" args={[video]} />
                 </meshBasicMaterial>
             </mesh>
-            <SimpleText text={label} position={[0, 1.1, 0.1]} fontSize={0.2} />
+
+            <SimpleText text={label} position={[0, 1.2, 0.05]} fontSize={0.25} />
         </group>
     );
 };
@@ -175,17 +194,31 @@ const SceneContent: React.FC<Omit<SceneProps, 'className'>> = ({
                             // We want them to form a curve centered on the camera
                             const x = Math.sin(angle) * dist;
                             const z = 2.2 - Math.cos(angle) * dist;
-                            const y = -0.6; // Lower part of view
+                            const y = 0.2; // Higher up to be in FOV
 
                             return (
                                 <group key={peer.peerId} position={[x, y, z]} rotation={[0, -angle, 0]} scale={0.3}>
-                                    <RemoteVideoPlane
-                                        stream={peer.stream}
-                                        position={[0, 0, 0]}
-                                        rotation={[0, 0, 0]}
-                                        userName={peer.userName}
-                                        avatar={peer.avatar}
-                                    />
+                                    {peer.trackingData ? (
+                                        <group scale={5}> {/* Scale up because the group is scaled by 0.3 */}
+                                            <Avatar
+                                                url={peer.avatar || 'avatar1.glb'}
+                                                externalExpressions={peer.trackingData}
+                                            />
+                                            <SimpleText
+                                                text={peer.userName}
+                                                position={[0, 2.2, 0]}
+                                                fontSize={0.2}
+                                            />
+                                        </group>
+                                    ) : (
+                                        <RemoteVideoPlane
+                                            stream={peer.stream}
+                                            position={[0, 0, 0]}
+                                            rotation={[0, 0, 0]}
+                                            userName={peer.userName}
+                                            avatar={peer.avatar}
+                                        />
+                                    )}
                                 </group>
                             );
                         })}
@@ -233,7 +266,7 @@ export const Scene: React.FC<SceneProps> = ({ className, ...props }) => {
     return (
         <div className={className}>
             <Canvas
-                camera={{ position: [0, 0, 2.2], fov: 20 }}
+                camera={{ position: [0, 0, 2.2], fov: 50 }}
                 gl={{ preserveDrawingBuffer: true, alpha: true }}
             >
                 <SceneContent {...props} />

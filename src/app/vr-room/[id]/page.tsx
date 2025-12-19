@@ -87,6 +87,22 @@ export default function VRRoomPage() {
         peer.on("connect", () => console.log("VRRoomPage: Peer connected to:", remoteName));
         peer.on("error", (err) => console.error("VRRoomPage: Peer error (createPeer):", err));
 
+        peer.on("data", (data) => {
+            try {
+                const msg = JSON.parse(data.toString());
+                if (msg.type === 'tracking-data') {
+                    setPeers((prev) => prev.map(p => {
+                        if (p.peerId === userToSignal) {
+                            return { ...p, trackingData: msg.trackingData };
+                        }
+                        return p;
+                    }));
+                }
+            } catch (e) {
+                console.error("Error parsing peer data:", e);
+            }
+        });
+
         peersRef.current.set(userToSignal, peer);
     };
 
@@ -132,6 +148,22 @@ export default function VRRoomPage() {
             peer.on("connect", () => console.log("VRRoomPage: Peer connected to:", remoteName));
             peer.on("error", (err) => console.error("VRRoomPage: Peer error (addPeer):", err));
 
+            peer.on("data", (data) => {
+                try {
+                    const msg = JSON.parse(data.toString());
+                    if (msg.type === 'tracking-data') {
+                        setPeers((prev) => prev.map(p => {
+                            if (p.peerId === callerId) {
+                                return { ...p, trackingData: msg.trackingData };
+                            }
+                            return p;
+                        }));
+                    }
+                } catch (e) {
+                    console.error("Error parsing peer data:", e);
+                }
+            });
+
             peersRef.current.set(callerId, peer);
         }
 
@@ -163,6 +195,21 @@ export default function VRRoomPage() {
                 if (incomingId === pairingId) {
                     setExternalExpressions(expressions);
                     setStatus("Receiving tracking data...");
+
+                    // Relay to other peers
+                    const trackingMsg = JSON.stringify({
+                        type: 'tracking-data',
+                        trackingData: expressions
+                    });
+                    peersRef.current.forEach(peer => {
+                        if (peer.connected) {
+                            try {
+                                peer.send(trackingMsg);
+                            } catch (e) {
+                                // Ignore send errors
+                            }
+                        }
+                    });
                 }
             });
 

@@ -21,7 +21,17 @@ export default function VideoRoom({ roomId, avatar }: VideoRoomProps) {
     // 2. Face Tracking Hook - Only enabled if role is 'sender'
     const { videoRef, faceResultRef, handResultRef, stream } = useFaceTracking({ enabled: deviceRole === 'sender' });
 
-    const [peers, setPeers] = useState<{ peerId: string; userName: string; avatar?: string; stream: MediaStream }[]>([]);
+    const [peers, setPeers] = useState<{
+        peerId: string;
+        userName: string;
+        avatar?: string;
+        stream: MediaStream;
+        trackingData?: {
+            blendshapes: Record<string, number>;
+            rotation: number[] | null;
+            handResult?: HandLandmarkerResult | null;
+        };
+    }[]>([]);
     const peersRef = useRef<Map<string, SimplePeer.Instance>>(new Map());
     const socketRef = useRef<Socket>();
     const canvasContainerRef = useRef<HTMLDivElement>(null);
@@ -147,9 +157,11 @@ export default function VideoRoom({ roomId, avatar }: VideoRoomProps) {
                 const data = {
                     type: 'tracking-data',
                     pairingId,
-                    blendshapes,
-                    rotation: matrix ? Array.from(matrix) : null,
-                    handResult: handResultRef.current // Send hand data too
+                    trackingData: {
+                        blendshapes,
+                        rotation: matrix ? Array.from(matrix) : null,
+                        handResult: handResultRef.current
+                    }
                 };
 
                 const json = JSON.stringify(data);
@@ -222,20 +234,22 @@ export default function VideoRoom({ roomId, avatar }: VideoRoomProps) {
             setPeers((prev) => [...prev, { peerId: userToSignal, userName: remoteName, avatar: remoteAvatar, stream }]);
         });
 
-        peer.on("error", (err) => {
-            console.error("Peer error (createPeer):", err);
-        });
-
         peer.on("data", (data) => {
             try {
                 const msg = JSON.parse(data.toString());
-                if (msg.type === 'tracking-data' && msg.pairingId === pairingId) {
-                    // We received tracking data from our paired device!
-                    setRemoteTrackingData({
-                        blendshapes: msg.blendshapes,
-                        rotation: msg.rotation,
-                        handResult: msg.handResult
-                    });
+                if (msg.type === 'tracking-data') {
+                    if (msg.pairingId === pairingId) {
+                        // We received tracking data from our paired device!
+                        setRemoteTrackingData(msg.trackingData);
+                    } else {
+                        // Tracking data from another peer
+                        setPeers((prev) => prev.map(p => {
+                            if (p.peerId === userToSignal) {
+                                return { ...p, trackingData: msg.trackingData };
+                            }
+                            return p;
+                        }));
+                    }
                 }
             } catch (e) {
                 console.error("Error parsing data:", e);
@@ -285,13 +299,19 @@ export default function VideoRoom({ roomId, avatar }: VideoRoomProps) {
         peer.on("data", (data) => {
             try {
                 const msg = JSON.parse(data.toString());
-                if (msg.type === 'tracking-data' && msg.pairingId === pairingId) {
-                    // We received tracking data from our paired device!
-                    setRemoteTrackingData({
-                        blendshapes: msg.blendshapes,
-                        rotation: msg.rotation,
-                        handResult: msg.handResult
-                    });
+                if (msg.type === 'tracking-data') {
+                    if (msg.pairingId === pairingId) {
+                        // We received tracking data from our paired device!
+                        setRemoteTrackingData(msg.trackingData);
+                    } else {
+                        // Tracking data from another peer
+                        setPeers((prev) => prev.map(p => {
+                            if (p.peerId === callerId) {
+                                return { ...p, trackingData: msg.trackingData };
+                            }
+                            return p;
+                        }));
+                    }
                 }
             } catch (e) {
                 console.error("Error parsing data:", e);
