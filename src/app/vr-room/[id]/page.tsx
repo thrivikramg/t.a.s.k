@@ -6,11 +6,12 @@ const Scene = dynamic(() => import('@/components/ar/Scene').then(mod => mod.Scen
 import { io, Socket } from "socket.io-client";
 import { useParams, useSearchParams } from "next/navigation";
 import SimplePeer from "simple-peer";
+import { useFaceTracking } from "@/hooks/useFaceTracking";
 
 /**
  * VR ROOM PAGE (Mobile)
  * Role: Renders the 3D avatar in SBS stereo mode.
- * Now also connects via WebRTC to display other users in the room.
+ * Now receives the laptop's webcam feed and runs tracking locally for better responsiveness.
  */
 export default function VRRoomPage() {
     const params = useParams();
@@ -25,8 +26,15 @@ export default function VRRoomPage() {
 
     // WebRTC State
     const [peers, setPeers] = useState<{ peerId: string; userName: string; avatar?: string; stream: MediaStream }[]>([]);
+    const [laptopStream, setLaptopStream] = useState<MediaStream | null>(null);
     const peersRef = useRef<Map<string, SimplePeer.Instance>>(new Map());
     const canvasContainerRef = useRef<HTMLDivElement>(null);
+
+    // Local tracking on the received laptop stream
+    const { faceResultRef, handResultRef } = useFaceTracking({
+        enabled: !!laptopStream,
+        externalStream: laptopStream
+    });
 
     // Helper to capture the 3D canvas stream
     const getCanvasStream = () => {
@@ -35,86 +43,99 @@ export default function VRRoomPage() {
             console.error("Canvas not found for stream capture");
             return null;
         }
-        // Capture at 60 FPS
         const stream = (canvas as any).captureStream(30) as MediaStream;
         return stream;
     };
 
     const createPeer = (userToSignal: string, socket: Socket, remoteName: string, remoteAvatar?: string) => {
         const stream = getCanvasStream();
-        if (!stream) {
-            console.error("No stream available for createPeer in VRRoomPage");
-            return;
-        }
+        if (!stream) return;
 
         console.log("VRRoomPage: Creating peer for:", userToSignal);
 
         const peer = new SimplePeer({
             initiator: true,
-            trickle: false,
+            trickle: true,
             stream: stream,
             config: {
                 iceServers: [
                     { urls: 'stun:stun.l.google.com:19302' },
+                    { urls: 'stun:stun1.l.google.com:19302' },
+                    { urls: 'stun:stun2.l.google.com:19302' },
                     { urls: 'stun:global.stun.twilio.com:3478' }
                 ]
             }
         });
 
         peer.on("signal", (signal) => {
-            console.log("VRRoomPage: Sending offer to:", userToSignal);
+            console.log("VRRoomPage: Sending signal (offer) to:", userToSignal);
             socket.emit("offer", { target: userToSignal, signal, callerName: "VR-User", callerAvatar: avatarUrl });
         });
 
         peer.on("stream", (stream) => {
-            console.log("VRRoomPage: Received stream from:", userToSignal);
-            setPeers((prev) => [...prev, { peerId: userToSignal, userName: remoteName, avatar: remoteAvatar, stream }]);
+            console.log("VRRoomPage: Received stream from:", remoteName);
+            if (remoteName === "Face-Sensing-Laptop") {
+                setLaptopStream(stream);
+            } else {
+                setPeers((prev) => {
+                    if (prev.find(p => p.peerId === userToSignal)) return prev;
+                    return [...prev, { peerId: userToSignal, userName: remoteName, avatar: remoteAvatar, stream }];
+                });
+            }
         });
 
-        peer.on("error", (err) => {
-            console.error("VRRoomPage: Peer error (createPeer):", err);
-        });
+        peer.on("connect", () => console.log("VRRoomPage: Peer connected to:", remoteName));
+        peer.on("error", (err) => console.error("VRRoomPage: Peer error (createPeer):", err));
 
         peersRef.current.set(userToSignal, peer);
     };
 
     const addPeer = (incomingSignal: any, callerId: string, socket: Socket, remoteName: string, remoteAvatar?: string) => {
         const stream = getCanvasStream();
-        if (!stream) {
-            console.error("No stream available for addPeer in VRRoomPage");
-            return;
-        }
+        if (!stream) return;
 
         console.log("VRRoomPage: Adding peer for:", callerId);
+        let peer = peersRef.current.get(callerId);
 
-        const peer = new SimplePeer({
-            initiator: false,
-            trickle: false,
-            stream: stream,
-            config: {
-                iceServers: [
-                    { urls: 'stun:stun.l.google.com:19302' },
-                    { urls: 'stun:global.stun.twilio.com:3478' }
-                ]
-            }
-        });
+        if (!peer) {
+            peer = new SimplePeer({
+                initiator: false,
+                trickle: true,
+                stream: stream,
+                config: {
+                    iceServers: [
+                        { urls: 'stun:stun.l.google.com:19302' },
+                        { urls: 'stun:stun1.l.google.com:19302' },
+                        { urls: 'stun:stun2.l.google.com:19302' },
+                        { urls: 'stun:global.stun.twilio.com:3478' }
+                    ]
+                }
+            });
 
-        peer.on("signal", (signal) => {
-            console.log("VRRoomPage: Sending answer to:", callerId);
-            socket.emit("answer", { target: callerId, signal, senderName: "VR-User", senderAvatar: avatarUrl });
-        });
+            peer.on("signal", (signal) => {
+                console.log("VRRoomPage: Sending signal (answer) to:", callerId);
+                socket.emit("answer", { target: callerId, signal, senderName: "VR-User", senderAvatar: avatarUrl });
+            });
 
-        peer.on("stream", (stream) => {
-            console.log("VRRoomPage: Received stream from:", callerId);
-            setPeers((prev) => [...prev, { peerId: callerId, userName: remoteName, avatar: remoteAvatar, stream }]);
-        });
+            peer.on("stream", (stream) => {
+                console.log("VRRoomPage: Received stream from:", remoteName);
+                if (remoteName === "Face-Sensing-Laptop") {
+                    setLaptopStream(stream);
+                } else {
+                    setPeers((prev) => {
+                        if (prev.find(p => p.peerId === callerId)) return prev;
+                        return [...prev, { peerId: callerId, userName: remoteName, avatar: remoteAvatar, stream }];
+                    });
+                }
+            });
 
-        peer.on("error", (err) => {
-            console.error("VRRoomPage: Peer error (addPeer):", err);
-        });
+            peer.on("connect", () => console.log("VRRoomPage: Peer connected to:", remoteName));
+            peer.on("error", (err) => console.error("VRRoomPage: Peer error (addPeer):", err));
+
+            peersRef.current.set(callerId, peer);
+        }
 
         peer.signal(incomingSignal);
-        peersRef.current.set(callerId, peer);
     };
 
     useEffect(() => {
@@ -129,52 +150,56 @@ export default function VRRoomPage() {
             socketRef.current = socket;
 
             socket.on("connect", () => {
-                setStatus("Connected! Waiting for data...");
-                socket!.emit("join-room", roomId, "VR-User", avatarUrl);
+                setStatus("Connected to server. Waiting for laptop...");
+                socket!.emit("join-room", roomId, "VR-User", avatarUrl, pairingId);
             });
 
-            // Expression updates from Laptop
+            socket.on("sensing-node-connected", ({ userId }) => {
+                setStatus("Paired Laptop detected. Connecting feed...");
+                createPeer(userId, socket!, "Face-Sensing-Laptop", "none");
+            });
+
             socket.on("expression-update", ({ pairingId: incomingId, expressions }) => {
                 if (incomingId === pairingId) {
                     setExternalExpressions(expressions);
-                    setStatus("Live");
+                    setStatus("Receiving tracking data...");
                 }
             });
 
-            // WebRTC: User Connected
             socket.on("user-connected", ({ userId, userName, avatar }) => {
                 console.log("User connected:", userId, userName);
-                // Ignore the sensing laptop
+                // Ignore the laptop here, it's handled by sensing-node-connected
                 if (userName === "Face-Sensing-Laptop") return;
+
+                setStatus(`New participant: ${userName}. Connecting...`);
                 createPeer(userId, socket!, userName, avatar);
             });
 
-            // WebRTC: User Disconnected
             socket.on("user-disconnected", (userId) => {
                 if (peersRef.current.has(userId)) {
                     peersRef.current.get(userId)?.destroy();
                     peersRef.current.delete(userId);
                 }
                 setPeers((prev) => prev.filter((p) => p.peerId !== userId));
+                setStatus("User disconnected.");
             });
 
-            // WebRTC: Offer
             socket.on("offer", ({ signal, callerId, callerName, callerAvatar }) => {
-                if (callerName === "Face-Sensing-Laptop") return;
+                setStatus(`Receiving connection from ${callerName}...`);
                 addPeer(signal, callerId, socket!, callerName, callerAvatar);
             });
 
-            // WebRTC: Answer
             socket.on("answer", ({ signal, senderId }) => {
+                setStatus("Connection established!");
                 const item = peersRef.current.get(senderId);
                 if (item) item.signal(signal);
             });
         };
 
-        // Wait for canvas to be ready
         checkCanvasInterval = setInterval(() => {
             if (canvasContainerRef.current?.querySelector("canvas")) {
                 clearInterval(checkCanvasInterval);
+                setStatus("Canvas ready. Connecting...");
                 connectSocket();
             }
         }, 500);
@@ -187,6 +212,12 @@ export default function VRRoomPage() {
         };
     }, [roomId, avatarUrl, pairingId]);
 
+    useEffect(() => {
+        if (laptopStream) {
+            setStatus("Live (Video Feed)");
+        }
+    }, [laptopStream]);
+
     return (
         <div className="relative h-screen w-screen bg-black overflow-hidden" ref={canvasContainerRef}>
             {/* The 3D Scene in forced Stereo (SBS) mode */}
@@ -194,11 +225,12 @@ export default function VRRoomPage() {
                 className="w-full h-full"
                 avatarUrl={avatarUrl}
                 isStereo={true}
+                faceResultRef={faceResultRef}
+                handResultRef={handResultRef}
                 externalExpressions={externalExpressions}
                 peers={peers}
             />
 
-            {/* Overlay for status */}
             {/* Overlay for status */}
             <div className="absolute bottom-0 left-0 w-full p-2 bg-black/80 backdrop-blur-md border-t border-white/10 z-50">
                 <p className="text-[10px] text-white/70 font-mono text-center">
@@ -216,3 +248,4 @@ export default function VRRoomPage() {
         </div>
     );
 }
+

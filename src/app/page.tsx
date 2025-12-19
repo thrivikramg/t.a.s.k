@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import AvatarPreview from "@/components/ar/AvatarPreview";
 
 export default function Home() {
@@ -9,7 +9,6 @@ export default function Home() {
     const [avatars, setAvatars] = useState<string[]>([]);
     const [selectedAvatar, setSelectedAvatar] = useState<string>("");
     const [roomId, setRoomId] = useState("");
-    const [isCreating, setIsCreating] = useState(false);
 
     useEffect(() => {
         fetch("/api/avatars")
@@ -34,16 +33,6 @@ export default function Home() {
             })
             .catch((err) => console.error("Failed to load avatars:", err));
     }, []);
-
-    const createRoom = () => {
-        const newRoomId = Math.random().toString(36).substring(2, 9);
-        router.push(`/room/${newRoomId}?avatar=${selectedAvatar}`);
-    };
-
-    const joinRoom = () => {
-        if (!roomId.trim()) return;
-        router.push(`/room/${roomId}?avatar=${selectedAvatar}`);
-    };
 
     return (
         <main className="flex min-h-screen flex-col items-center justify-center p-8 bg-zinc-950 text-white relative">
@@ -90,48 +79,79 @@ export default function Home() {
                 </div>
 
                 {/* Actions */}
-                <div className="grid md:grid-cols-2 gap-8 w-full max-w-2xl">
-                    {/* Create Room */}
-                    <div className="p-8 rounded-2xl bg-zinc-900/50 border border-zinc-800 backdrop-blur-sm flex flex-col items-center gap-6 hover:border-zinc-700 transition-colors">
-                        <div className="w-16 h-16 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400 text-2xl">
-                            +
+                <div className="grid md:grid-cols-2 gap-8 w-full max-w-4xl">
+                    {/* Standard Mode */}
+                    <div className="space-y-8">
+                        <div className="p-8 rounded-2xl bg-zinc-900/50 border border-zinc-800 backdrop-blur-sm flex flex-col items-center gap-6 hover:border-zinc-700 transition-colors">
+                            <div className="w-16 h-16 rounded-full bg-blue-500/20 flex items-center justify-center text-blue-400 text-2xl">
+                                🌐
+                            </div>
+                            <div className="text-center">
+                                <h3 className="text-xl font-semibold mb-2">Standard Video Call</h3>
+                                <p className="text-sm text-zinc-400">Join directly from this device</p>
+                            </div>
+                            <div className="w-full space-y-3">
+                                <input
+                                    type="text"
+                                    placeholder="Room ID (Optional)"
+                                    value={roomId}
+                                    onChange={(e) => setRoomId(e.target.value)}
+                                    className="w-full px-4 py-3 rounded-lg bg-zinc-950 border border-zinc-700 focus:border-blue-500 outline-none transition-all text-center"
+                                />
+                                <button
+                                    onClick={() => {
+                                        const id = roomId.trim() || Math.random().toString(36).substring(2, 9);
+                                        router.push(`/room/${id}?avatar=${selectedAvatar}`);
+                                    }}
+                                    className="w-full py-3 px-6 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold transition-all"
+                                >
+                                    {roomId.trim() ? "Join Room" : "Create New Room"}
+                                </button>
+                            </div>
                         </div>
-                        <div className="text-center">
-                            <h3 className="text-xl font-semibold mb-2">Create New Room</h3>
-                            <p className="text-sm text-zinc-400">Start a new call and invite others</p>
-                        </div>
-                        <button
-                            onClick={createRoom}
-                            className="w-full py-3 px-6 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold transition-all shadow-lg shadow-blue-600/20"
-                        >
-                            Create Room
-                        </button>
                     </div>
 
-                    {/* Join Room */}
-                    <div className="p-8 rounded-2xl bg-zinc-900/50 border border-zinc-800 backdrop-blur-sm flex flex-col items-center gap-6 hover:border-zinc-700 transition-colors">
+                    {/* Pairing Mode (Laptop + Mobile) */}
+                    <div className="p-8 rounded-2xl bg-gradient-to-br from-purple-900/20 to-blue-900/20 border border-purple-500/30 backdrop-blur-sm flex flex-col items-center gap-6 hover:border-purple-500/50 transition-colors relative overflow-hidden">
+                        <div className="absolute top-2 right-2 px-2 py-1 bg-purple-600 rounded text-[10px] font-bold uppercase tracking-wider">
+                            Recommended
+                        </div>
                         <div className="w-16 h-16 rounded-full bg-purple-500/20 flex items-center justify-center text-purple-400 text-2xl">
-                            →
+                            💻 + 📱
                         </div>
                         <div className="text-center">
-                            <h3 className="text-xl font-semibold mb-2">Join Existing Room</h3>
-                            <p className="text-sm text-zinc-400">Enter a room ID to join a call</p>
+                            <h3 className="text-xl font-semibold mb-2">Device Pairing Mode</h3>
+                            <p className="text-sm text-zinc-400">Use Laptop for tracking + Mobile for VR</p>
                         </div>
-                        <div className="w-full space-y-3">
-                            <input
-                                type="text"
-                                placeholder="Enter Room ID"
-                                value={roomId}
-                                onChange={(e) => setRoomId(e.target.value)}
-                                className="w-full px-4 py-3 rounded-lg bg-zinc-950 border border-zinc-700 focus:border-purple-500 focus:ring-1 focus:ring-purple-500 outline-none transition-all text-center"
-                            />
-                            <button
-                                onClick={joinRoom}
-                                disabled={!roomId.trim()}
-                                className="w-full py-3 px-6 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-semibold transition-all shadow-lg shadow-purple-600/20 disabled:opacity-50 disabled:cursor-not-allowed"
-                            >
-                                Join Room
-                            </button>
+
+                        <div className="w-full space-y-4">
+                            <div className="grid grid-cols-2 gap-2">
+                                <button
+                                    onClick={() => {
+                                        const id = roomId.trim() || Math.random().toString(36).substring(2, 9);
+                                        const pId = Math.floor(1000 + Math.random() * 9000);
+                                        router.push(`/sender/${id}?pairingId=${pId}`);
+                                    }}
+                                    className="py-3 px-4 rounded-lg bg-zinc-800 hover:bg-zinc-700 text-white text-sm font-medium border border-zinc-700 flex flex-col items-center gap-1"
+                                >
+                                    <span>Step 1</span>
+                                    <span className="text-[10px] opacity-60">Open on Laptop</span>
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        const id = roomId.trim() || Math.random().toString(36).substring(2, 9);
+                                        const pId = Math.floor(1000 + Math.random() * 9000);
+                                        router.push(`/vr-room/${id}?avatar=${selectedAvatar}&pairingId=${pId}`);
+                                    }}
+                                    className="py-3 px-4 rounded-lg bg-purple-600 hover:bg-purple-700 text-white text-sm font-medium flex flex-col items-center gap-1"
+                                >
+                                    <span>Step 2</span>
+                                    <span className="text-[10px] opacity-80">Open on Mobile</span>
+                                </button>
+                            </div>
+                            <p className="text-[10px] text-center text-zinc-500 italic">
+                                Tip: Use the same Room ID and Pairing ID on both devices.
+                            </p>
                         </div>
                     </div>
                 </div>

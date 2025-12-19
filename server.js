@@ -4,7 +4,7 @@ const next = require("next");
 const { Server } = require("socket.io");
 
 const dev = process.env.NODE_ENV !== "production";
-const hostname = process.env.HOSTNAME || "localhost";
+const hostname = process.env.HOSTNAME || "0.0.0.0";
 const port = process.env.PORT || 3000;
 // when using middleware `hostname` and `port` must be provided below
 const app = next({ dev, hostname, port });
@@ -48,14 +48,29 @@ app.prepare().then(() => {
     io.on("connection", (socket) => {
         console.log("Socket connected:", socket.id);
 
-        socket.on("join-room", (roomId, userName, avatar) => {
-            socket.join(roomId);
-            socket.to(roomId).emit("user-connected", { userId: socket.id, userName, avatar });
-            console.log(`User ${socket.id} (${userName}) joined room ${roomId} with avatar ${avatar}`);
+        socket.on("join-room", (roomId, userName, avatar, pairingId) => {
+            // Only actual participants join the main room
+            if (userName !== "Face-Sensing-Laptop") {
+                socket.join(roomId);
+                socket.to(roomId).emit("user-connected", { userId: socket.id, userName, avatar, pairingId });
+                console.log(`User ${socket.id} (${userName}) joined room ${roomId}`);
+            } else {
+                console.log(`Sensing Node ${socket.id} initialized for pairing ${pairingId}`);
+            }
+
+            // Everyone with a pairingId joins their private pairing room
+            if (pairingId) {
+                socket.join(`pair-${pairingId}`);
+
+                if (userName === "Face-Sensing-Laptop") {
+                    socket.to(`pair-${pairingId}`).emit("sensing-node-connected", { userId: socket.id });
+                } else {
+                    socket.to(`pair-${pairingId}`).emit("vr-user-connected", { userId: socket.id });
+                }
+            }
         });
 
         socket.on("offer", (data) => {
-            // data: { target, signal, callerName, callerAvatar }
             io.to(data.target).emit("offer", {
                 signal: data.signal,
                 callerId: socket.id,
@@ -65,7 +80,6 @@ app.prepare().then(() => {
         });
 
         socket.on("answer", (data) => {
-            // data: { target, signal, senderName, senderAvatar }
             io.to(data.target).emit("answer", {
                 signal: data.signal,
                 senderId: socket.id,
@@ -75,8 +89,13 @@ app.prepare().then(() => {
         });
 
         socket.on("expression-update", ({ roomId, pairingId, expressions }) => {
-            // Broadcast facial expressions with pairingId to everyone else in the room
-            socket.to(roomId).emit("expression-update", { pairingId, expressions });
+            if (pairingId) {
+                // Send only to the paired device
+                socket.to(`pair-${pairingId}`).emit("expression-update", { pairingId, expressions });
+            } else if (roomId) {
+                // Fallback to room broadcast if no pairing
+                socket.to(roomId).emit("expression-update", { pairingId, expressions });
+            }
         });
 
         socket.on("disconnecting", () => {

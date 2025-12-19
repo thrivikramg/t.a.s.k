@@ -111,64 +111,7 @@ export const Avatar: React.FC<AvatarProps> = ({ faceResultRef, handResultRef, ur
     const handResult = externalExpressions?.handResult || handResultRef?.current;
 
     // --- Face Tracking (Local or External) ---
-    if (externalExpressions) {
-      const { blendshapes: extBlendshapes, rotation } = externalExpressions;
-
-      // Check for talking
-      const jawOpen = extBlendshapes['jawOpen'] || 0;
-      const mouthOpen = extBlendshapes['mouthOpen'] || 0;
-      isTalking = jawOpen > 0.05 || mouthOpen > 0.05;
-
-      // Head rotation - Increased damping for smoother movement
-      if (rotation && headBoneRef.current) {
-        const m = new THREE.Matrix4().fromArray(rotation);
-        const eulerRotation = new THREE.Euler().setFromRotationMatrix(m);
-        const damp = 0.4; // Increased for snappier movement
-        headBoneRef.current.rotation.x = THREE.MathUtils.lerp(headBoneRef.current.rotation.x, eulerRotation.x, damp);
-        headBoneRef.current.rotation.y = THREE.MathUtils.lerp(headBoneRef.current.rotation.y, -eulerRotation.y, damp);
-        headBoneRef.current.rotation.z = THREE.MathUtils.lerp(headBoneRef.current.rotation.z, -eulerRotation.z, damp);
-
-        // Body movement (Spine follows head)
-        if (spineBoneRef.current) {
-          spineBoneRef.current.rotation.x = THREE.MathUtils.lerp(spineBoneRef.current.rotation.x, eulerRotation.x * 0.3, damp);
-          spineBoneRef.current.rotation.y = THREE.MathUtils.lerp(spineBoneRef.current.rotation.y, -eulerRotation.y * 0.3, damp);
-          spineBoneRef.current.rotation.z = THREE.MathUtils.lerp(spineBoneRef.current.rotation.z, -eulerRotation.z * 0.3, damp);
-        }
-      }
-
-      // Blendshapes to morph targets
-      morphMeshes.current.forEach((mesh) => {
-        if (!mesh.morphTargetDictionary || !mesh.morphTargetInfluences) return;
-        const dictionary = mesh.morphTargetDictionary;
-        const influences = mesh.morphTargetInfluences;
-
-        Object.entries(extBlendshapes).forEach(([name, score]) => {
-          let index = dictionary[name];
-          if (index === undefined && BLENDSHAPE_MAP[name]) {
-            for (const mappedName of BLENDSHAPE_MAP[name]) {
-              if (dictionary[mappedName] !== undefined) {
-                index = dictionary[mappedName];
-                break;
-              }
-            }
-          }
-
-          if (index !== undefined) {
-            let finalScore = score;
-            let lerpFactor = 0.5; // Faster blendshape transitions
-            if (name.toLowerCase().includes('blink')) {
-              finalScore = Math.min(1, score * 1.5);
-              lerpFactor = 0.8; // Blinks need to be fast
-            }
-            if (name === 'jawOpen' || name === 'mouthOpen') {
-              finalScore = Math.min(1, score * 2.5);
-            }
-            influences[index] = THREE.MathUtils.lerp(influences[index], finalScore, lerpFactor);
-          }
-        });
-      });
-
-    } else if (faceResult && faceResult.faceBlendshapes && faceResult.faceBlendshapes.length > 0) {
+    if (faceResult && faceResult.faceBlendshapes && faceResult.faceBlendshapes.length > 0) {
       blendshapes = faceResult.faceBlendshapes[0].categories;
       const matrix = faceResult.facialTransformationMatrixes?.[0];
 
@@ -241,6 +184,62 @@ export const Avatar: React.FC<AvatarProps> = ({ faceResultRef, handResultRef, ur
             if (name.toLowerCase().includes('blink')) {
               finalScore = Math.min(1, score * 1.5);
               lerpFactor = 0.6; // Blinks need to be slightly faster but still smooth
+            }
+            if (name === 'jawOpen' || name === 'mouthOpen') {
+              finalScore = Math.min(1, score * 2.5);
+            }
+            influences[index] = THREE.MathUtils.lerp(influences[index], finalScore, lerpFactor);
+          }
+        });
+      });
+    } else if (externalExpressions) {
+      const { blendshapes: extBlendshapes, rotation } = externalExpressions;
+
+      // Check for talking
+      const jawOpen = extBlendshapes['jawOpen'] || 0;
+      const mouthOpen = extBlendshapes['mouthOpen'] || 0;
+      isTalking = jawOpen > 0.05 || mouthOpen > 0.05;
+
+      // Head rotation - Increased damping for smoother movement
+      if (rotation && headBoneRef.current) {
+        const m = new THREE.Matrix4().fromArray(rotation);
+        const eulerRotation = new THREE.Euler().setFromRotationMatrix(m);
+        const damp = 0.4; // Increased for snappier movement
+        headBoneRef.current.rotation.x = THREE.MathUtils.lerp(headBoneRef.current.rotation.x, eulerRotation.x, damp);
+        headBoneRef.current.rotation.y = THREE.MathUtils.lerp(headBoneRef.current.rotation.y, -eulerRotation.y, damp);
+        headBoneRef.current.rotation.z = THREE.MathUtils.lerp(headBoneRef.current.rotation.z, -eulerRotation.z, damp);
+
+        // Body movement (Spine follows head)
+        if (spineBoneRef.current) {
+          spineBoneRef.current.rotation.x = THREE.MathUtils.lerp(spineBoneRef.current.rotation.x, eulerRotation.x * 0.3, damp);
+          spineBoneRef.current.rotation.y = THREE.MathUtils.lerp(spineBoneRef.current.rotation.y, -eulerRotation.y * 0.3, damp);
+          spineBoneRef.current.rotation.z = THREE.MathUtils.lerp(spineBoneRef.current.rotation.z, -eulerRotation.z * 0.3, damp);
+        }
+      }
+
+      // Blendshapes to morph targets
+      morphMeshes.current.forEach((mesh) => {
+        if (!mesh.morphTargetDictionary || !mesh.morphTargetInfluences) return;
+        const dictionary = mesh.morphTargetDictionary;
+        const influences = mesh.morphTargetInfluences;
+
+        Object.entries(extBlendshapes).forEach(([name, score]) => {
+          let index = dictionary[name];
+          if (index === undefined && BLENDSHAPE_MAP[name]) {
+            for (const mappedName of BLENDSHAPE_MAP[name]) {
+              if (dictionary[mappedName] !== undefined) {
+                index = dictionary[mappedName];
+                break;
+              }
+            }
+          }
+
+          if (index !== undefined) {
+            let finalScore = score;
+            let lerpFactor = 0.5; // Faster blendshape transitions
+            if (name.toLowerCase().includes('blink')) {
+              finalScore = Math.min(1, score * 1.5);
+              lerpFactor = 0.8; // Blinks need to be fast
             }
             if (name === 'jawOpen' || name === 'mouthOpen') {
               finalScore = Math.min(1, score * 2.5);

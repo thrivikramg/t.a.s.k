@@ -7,7 +7,13 @@ import {
     HandLandmarkerResult,
 } from "@mediapipe/tasks-vision";
 
-export const useFaceTracking = ({ enabled = true }: { enabled?: boolean } = {}) => {
+export const useFaceTracking = ({
+    enabled = true,
+    externalStream = null
+}: {
+    enabled?: boolean;
+    externalStream?: MediaStream | null;
+} = {}) => {
     const [faceLandmarker, setFaceLandmarker] = useState<FaceLandmarker | null>(null);
     const [handLandmarker, setHandLandmarker] = useState<HandLandmarker | null>(null);
 
@@ -76,16 +82,20 @@ export const useFaceTracking = ({ enabled = true }: { enabled?: boolean } = {}) 
         if (!faceLandmarker || !handLandmarker) return;
 
         try {
-            const stream = await navigator.mediaDevices.getUserMedia({
-                video: { width: 1280, height: 720 },
-                audio: true,
-            });
+            let activeStream = externalStream;
+
+            if (!activeStream) {
+                activeStream = await navigator.mediaDevices.getUserMedia({
+                    video: { width: 1280, height: 720 },
+                    audio: true,
+                });
+            }
 
             // Wait for video ref to be available if it's null
             const assignStream = () => {
                 if (videoRef.current) {
-                    videoRef.current.srcObject = stream;
-                    setStream(stream);
+                    videoRef.current.srcObject = activeStream;
+                    setStream(activeStream);
                     videoRef.current.onloadedmetadata = () => {
                         videoRef.current?.play().catch(e => console.error("Play error:", e));
                         predictWebcam();
@@ -107,13 +117,13 @@ export const useFaceTracking = ({ enabled = true }: { enabled?: boolean } = {}) 
         }
         return () => {
             if (requestRef.current) cancelAnimationFrame(requestRef.current);
-            // Stop stream
-            if (videoRef.current && videoRef.current.srcObject) {
-                const stream = videoRef.current.srcObject as MediaStream;
-                stream.getTracks().forEach(track => track.stop());
+            // Stop stream only if it was created locally
+            if (!externalStream && videoRef.current && videoRef.current.srcObject) {
+                const s = videoRef.current.srcObject as MediaStream;
+                s.getTracks().forEach(track => track.stop());
             }
         };
-    }, [faceLandmarker, handLandmarker, enabled]);
+    }, [faceLandmarker, handLandmarker, enabled, externalStream]);
 
     return { videoRef, faceResultRef, handResultRef, stream };
 };

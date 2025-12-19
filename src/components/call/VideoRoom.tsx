@@ -7,7 +7,7 @@ import dynamic from 'next/dynamic';
 const Scene = dynamic(() => import('@/components/ar/Scene').then(mod => mod.Scene), { ssr: false });
 import { io, Socket } from "socket.io-client";
 import SimplePeer from "simple-peer";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 
 interface VideoRoomProps {
     roomId: string;
@@ -28,7 +28,8 @@ export default function VideoRoom({ roomId, avatar }: VideoRoomProps) {
     const [showWebcam, setShowWebcam] = useState(false);
     const streamRef = useRef<MediaStream | null>(null);
     const [isStereo, setIsStereo] = useState(false);
-    const [pairingId, setPairingId] = useState("");
+    const searchParams = useSearchParams();
+    const [pairingId, setPairingId] = useState(searchParams.get("pairingId") || "");
     const router = useRouter();
 
     // Remote tracking data from paired device
@@ -77,10 +78,11 @@ export default function VideoRoom({ roomId, avatar }: VideoRoomProps) {
                 console.error("Socket connection error:", err);
             });
 
-            socket.emit("join-room", roomId, userName, avatar);
+            socket.emit("join-room", roomId, userName, avatar, pairingId);
 
             socket.on("user-connected", ({ userId, userName: remoteName, avatar: remoteAvatar }) => {
                 console.log("User connected:", userId, remoteName, remoteAvatar);
+                if (remoteName === "Face-Sensing-Laptop") return; // Ignore sensing nodes
                 createPeer(userId, socket!.id!, socket!, remoteName, remoteAvatar);
             });
 
@@ -95,6 +97,7 @@ export default function VideoRoom({ roomId, avatar }: VideoRoomProps) {
 
             socket.on("offer", ({ signal, callerId, callerName, callerAvatar }) => {
                 console.log("Received offer from:", callerId, callerName);
+                if (callerName === "Face-Sensing-Laptop") return; // Ignore sensing nodes
                 addPeer(signal, callerId, socket!, callerName, callerAvatar);
             });
 
